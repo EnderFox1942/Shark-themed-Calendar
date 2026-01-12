@@ -388,53 +388,44 @@ class SharkCalendarApp:
         logger.info("📄 Setting up templates...")
         self.setup_templates()
         logger.info("✅ Shark Calendar Application initialized successfully")
-   def setup_session(self):
-    """Setup encrypted session storage"""
-    logger.info("🔐 Configuring encrypted cookie storage...")
     
-    secret_key_str = self.env_vars['SECRET_KEY']
-    
-    try:
-        # Try to use it directly as a Fernet key
-        secret_key = secret_key_str.encode()
+    def setup_session(self):
+        """Setup encrypted session storage"""
+        logger.info("🔐 Configuring encrypted cookie storage...")
         
-        # Validate it's a proper Fernet key
-        # Fernet keys should be 32 bytes, base64url-encoded (which results in 44 characters)
-        decoded = base64.urlsafe_b64decode(secret_key)
-        if len(decoded) != 32:
-            raise ValueError(f"Decoded key must be 32 bytes, got {len(decoded)} bytes")
+        secret_key_str = self.env_vars['SECRET_KEY']
         
-        # Test if it's a valid Fernet key by trying to create a Fernet instance
-        fernet.Fernet(secret_key)
-        logger.info("   ✅ Using provided Fernet key")
+        try:
+            # Try to use it directly as a Fernet key
+            secret_key = secret_key_str.encode()
+            
+            # Validate it's a proper Fernet key
+            # Fernet keys should be 32 bytes, base64url-encoded (which results in 44 characters)
+            decoded = base64.urlsafe_b64decode(secret_key)
+            if len(decoded) != 32:
+                raise ValueError(f"Decoded key must be 32 bytes, got {len(decoded)} bytes")
+            
+            # Test if it's a valid Fernet key by trying to create a Fernet instance
+            fernet.Fernet(secret_key)
+            logger.info("   ✅ Using provided Fernet key")
+            
+        except Exception as e:
+            # If not a valid Fernet key, create one from the string
+            logger.info(f"   ⚠️  SECRET_KEY is not a valid Fernet key: {e}")
+            logger.info("   🔧 Converting SECRET_KEY to Fernet format...")
+            
+            # Create a proper 32-byte key from the SECRET_KEY string
+            # Use SHA-256 hash to ensure we always get 32 bytes
+            hash_digest = hashlib.sha256(secret_key_str.encode()).digest()
+            secret_key = base64.urlsafe_b64encode(hash_digest)
+            
+            logger.info("   ✅ Generated Fernet key from SECRET_KEY")
+            logger.info("   ⚠️  Warning: For production, generate a proper Fernet key:")
+            logger.info("   python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'")
+            logger.info("   Then set it as your SECRET_KEY in .env")
         
-    except Exception as e:
-        # If not a valid Fernet key, create one from the string
-        logger.info(f"   ⚠️  SECRET_KEY is not a valid Fernet key: {e}")
-        logger.info("   🔧 Converting SECRET_KEY to Fernet format...")
-        
-        # Create a proper 32-byte key from the SECRET_KEY string
-        # Use SHA-256 hash to ensure we always get 32 bytes
-        hash_digest = hashlib.sha256(secret_key_str.encode()).digest()
-        secret_key = base64.urlsafe_b64encode(hash_digest)
-        
-        logger.info("   ✅ Generated Fernet key from SECRET_KEY")
-        logger.info("   ⚠️  Warning: For production, generate a proper Fernet key:")
-        logger.info("   python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'")
-        logger.info("   Then set it as your SECRET_KEY in .env")
-    
-    setup(self.app, EncryptedCookieStorage(secret_key))
-    logger.info("✅ Session storage configured")
-    
-    def setup_templates(self):
-        """Setup Jinja2 templates"""
-        aiohttp_jinja2.setup(
-            self.app,
-            loader=jinja2.DictLoader({
-                'login.html': self.get_login_template(),
-                'index.html': self.get_index_template(),
-            })
-        )
+        setup(self.app, EncryptedCookieStorage(secret_key))
+        logger.info("✅ Session storage configured")
     
     def setup_routes(self):
         """Setup application routes"""
