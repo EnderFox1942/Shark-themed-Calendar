@@ -52,7 +52,7 @@ def load_environment() -> Dict[str, str]:
     # Try to load .env file if it exists (optional, for local development)
     load_env_file('.env')
     
-    required_vars = ['SUPABASE_URL', 'SUPABASE_KEY', 'USER', 'PASS', 'SECRET_KEY']
+    required_vars = ['SUPABASE_URL', 'SUPABASE_KEY', 'USER', 'PASS']
     env_vars = {}
     
     for var in required_vars:
@@ -390,41 +390,10 @@ class SharkCalendarApp:
         logger.info("✅ Shark Calendar Application initialized successfully")
     
     def setup_session(self):
-        """Setup encrypted session storage"""
-        logger.info("🔐 Configuring encrypted cookie storage...")
-        
-        secret_key_str = self.env_vars['SECRET_KEY']
-        
-        try:
-            # Try to use it directly as a Fernet key
-            secret_key = secret_key_str.encode()
-            
-            # Validate it's a proper Fernet key
-            # Fernet keys should be 32 bytes, base64url-encoded (which results in 44 characters)
-            decoded = base64.urlsafe_b64decode(secret_key)
-            if len(decoded) != 32:
-                raise ValueError(f"Decoded key must be 32 bytes, got {len(decoded)} bytes")
-            
-            # Test if it's a valid Fernet key by trying to create a Fernet instance
-            fernet.Fernet(secret_key)
-            logger.info("   ✅ Using provided Fernet key")
-            
-        except Exception as e:
-            # If not a valid Fernet key, create one from the string
-            logger.info(f"   ⚠️  SECRET_KEY is not a valid Fernet key: {e}")
-            logger.info("   🔧 Converting SECRET_KEY to Fernet format...")
-            
-            # Create a proper 32-byte key from the SECRET_KEY string
-            # Use SHA-256 hash to ensure we always get 32 bytes
-            hash_digest = hashlib.sha256(secret_key_str.encode()).digest()
-            secret_key = base64.urlsafe_b64encode(hash_digest)
-            
-            logger.info("   ✅ Generated Fernet key from SECRET_KEY")
-            logger.info("   ⚠️  Warning: For production, generate a proper Fernet key:")
-            logger.info("   python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'")
-            logger.info("   Then set it as your SECRET_KEY in .env")
-        
-        setup(self.app, EncryptedCookieStorage(secret_key))
+        """Setup simple session storage"""
+        logger.info("🔐 Configuring session storage...")
+        from aiohttp_session.cookie_storage import SimpleCookieStorage
+        setup(self.app, SimpleCookieStorage())
         logger.info("✅ Session storage configured")
     
     def setup_routes(self):
