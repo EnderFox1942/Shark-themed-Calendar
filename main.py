@@ -67,7 +67,18 @@ class SharkCalendarDB:
     """Database handler for shark calendar using Supabase"""
     
     def __init__(self, supabase_url: str, supabase_key: str):
-        self.client: Client = create_client(supabase_url, supabase_key)
+        # Supabase client with built-in connection pooling
+        # The Supabase client automatically handles connection pooling
+        # and keeps connections alive for reuse
+        self.client: Client = create_client(
+            supabase_url, 
+            supabase_key,
+            options={
+                'schema': 'public',
+                'auto_refresh_token': True,
+                'persist_session': True
+            }
+        )
         self.events_table = "shark_events"
         self.users_table = "shark_users"
     
