@@ -1,6 +1,6 @@
 """
 Shark-Themed Web Calendar System with Authentication and PFP Cropping
-Requires: aiohttp, supabase, aiohttp-session, cryptography
+Requires: aiohttp, supabase, aiohttp-session, cryptography, aiohttp-jinja2
 Install: pip install aiohttp supabase aiohttp-jinja2 jinja2 aiohttp-session cryptography
 """
 
@@ -48,7 +48,6 @@ def load_environment() -> Dict[str, str]:
     """Load environment variables from system environment or .env file"""
     logger.info("🔧 Loading environment variables...")
     
-    # Try to load .env file if it exists (optional, for local development)
     load_env_file('.env')
     
     required_vars = ['SUPABASE_URL', 'SUPABASE_KEY', 'USER', 'PASS']
@@ -65,7 +64,6 @@ def load_environment() -> Dict[str, str]:
         else:
             logger.info(f"✅ {var} = {value}")
     
-    # Optional: Use pooler URL if provided, otherwise use regular URL
     pooler_url = os.environ.get('SUPABASE_POOLER_URL')
     if pooler_url:
         env_vars['SUPABASE_POOLER_URL'] = pooler_url
@@ -73,7 +71,6 @@ def load_environment() -> Dict[str, str]:
     else:
         logger.info("ℹ️  SUPABASE_POOLER_URL not set (using regular URL)")
     
-    # Port configuration for Render (uses PORT env var) or default to 8080
     env_vars['APP_PORT'] = os.environ.get('PORT', os.environ.get('APP_PORT', '8080'))
     env_vars['APP_HOST'] = os.environ.get('APP_HOST', '0.0.0.0')
     
@@ -97,17 +94,14 @@ class User:
     
     @staticmethod
     def _hash_password(password: str) -> str:
-        """Hash password using SHA-256"""
         return hashlib.sha256(password.encode()).hexdigest()
     
     def verify_password(self, password: str) -> bool:
-        """Verify password against stored hash"""
         is_valid = self._hash_password(password) == self.password_hash
         logger.info(f"🔐 Password verification for {self.username}: {'✅ Success' if is_valid else '❌ Failed'}")
         return is_valid
     
     def set_profile_picture(self, picture_data: str):
-        """Set profile picture (base64 encoded)"""
         logger.info(f"🖼️  Setting profile picture for {self.username}")
         self.profile_picture = picture_data
 
@@ -116,7 +110,6 @@ class SharkCalendarDB:
     """Database handler for shark calendar using Supabase"""
     
     def __init__(self, supabase_url: str, supabase_key: str, pooler_url: Optional[str] = None):
-        # Use pooler URL if provided, otherwise use regular URL
         connection_url = pooler_url if pooler_url else supabase_url
         
         logger.info(f"🔗 Connecting to Supabase...")
@@ -125,9 +118,6 @@ class SharkCalendarDB:
         else:
             logger.info(f"   Using standard REST API connection")
         
-        # Supabase client with built-in connection pooling
-        # The Supabase client automatically handles connection pooling
-        # and keeps connections alive for reuse
         self.client: Client = create_client(connection_url, supabase_key)
         self.events_table = "shark_events"
         self.users_table = "shark_users"
@@ -137,7 +127,6 @@ class SharkCalendarDB:
     async def initialize_tables(self):
         """Create tables if they don't exist using Supabase REST API"""
         try:
-            # Check if tables exist by attempting to query them
             tables_exist = True
             try:
                 self.client.table(self.events_table).select("id").limit(1).execute()
@@ -205,7 +194,7 @@ USING (true);
     
     async def create_event(self, title: str, description: str, 
                           event_date: str, event_time: str,
-                          shark_species: str, username: str) -> Dict:
+                          tags: str, username: str) -> Dict:
         """Create a new calendar event"""
         logger.info(f"📝 Creating event: '{title}' for user '{username}'")
         
@@ -214,64 +203,10 @@ USING (true);
             "description": description,
             "event_date": event_date,
             "event_time": event_time,
-            "shark_species": shark_species,
+            "tags": tags,
             "username": username,
             "created_at": datetime.now().isoformat()
         }
-        
-        function openProfileModal() {
-            document.getElementById('profileModal').classList.add('active');
-        }
-        
-        function closeProfileModal() {
-            document.getElementById('profileModal').classList.remove('active');
-            
-            if (cropper) {
-                cropper.destroy();
-                cropper = null;
-            }
-            
-            document.getElementById('profileFileInput').value = '';
-            document.getElementById('cropContainer').style.display = 'none';
-            document.getElementById('saveCropBtn').style.display = 'none';
-        }
-        
-        // Event Form
-        document.getElementById('eventForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const data = {
-                title: document.getElementById('eventTitle').value,
-                description: document.getElementById('eventDescription').value,
-                event_date: document.getElementById('eventDate').value,
-                event_time: document.getElementById('eventTime').value,
-                tags: JSON.stringify(currentTags)
-            };
-            
-            try {
-                const response = await fetch('/api/events', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(data)
-                });
-                
-                if (response.ok) {
-                    closeEventModal();
-                    await loadEvents();
-                    document.getElementById('eventForm').reset();
-                    currentTags = [];
-                } else {
-                    alert('Failed to create event');
-                }
-            } catch (error) {
-                alert('Failed to create event');
-            }
-        });
-        
-        // Initialize
-        loadEvents();
-        setupTagInput();
-    </script>
         
         try:
             result = self.client.table(self.events_table).insert(data).execute()
@@ -404,7 +339,7 @@ class SharkCalendarApp:
         self.db = SharkCalendarDB(
             env_vars['SUPABASE_URL'],
             env_vars['SUPABASE_KEY'],
-            env_vars.get('SUPABASE_POOLER_URL')  # Optional pooler URL
+            env_vars.get('SUPABASE_POOLER_URL')
         )
         self.app = web.Application()
         logger.info("🔧 Setting up session management...")
@@ -486,7 +421,6 @@ class SharkCalendarApp:
             session['authenticated'] = True
             session['username'] = username
             
-            # Load profile picture
             profile_pic = await self.db.get_profile_picture(username)
             if profile_pic:
                 self.user.set_profile_picture(profile_pic)
@@ -609,8 +543,7 @@ class SharkCalendarApp:
     
     def get_login_template(self) -> str:
         """Return HTML template for login page"""
-        return '''
-<!DOCTYPE html>
+        return '''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -620,7 +553,6 @@ class SharkCalendarApp:
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
         body {
             font-family: 'Space Mono', monospace;
             background: linear-gradient(180deg, #001a33 0%, #003d5c 50%, #0066a1 100%);
@@ -630,7 +562,6 @@ class SharkCalendarApp:
             justify-content: center;
             padding: 20px;
         }
-        
         .login-container {
             background: rgba(0, 26, 51, 0.85);
             backdrop-filter: blur(20px);
@@ -641,13 +572,7 @@ class SharkCalendarApp:
             width: 100%;
             box-shadow: 0 0 60px rgba(0, 217, 255, 0.2);
         }
-        
-        .shark-logo {
-            font-size: 100px;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        
+        .shark-logo { font-size: 100px; text-align: center; margin-bottom: 20px; }
         h1 {
             font-family: 'Bebas Neue', cursive;
             color: #00d9ff;
@@ -658,7 +583,6 @@ class SharkCalendarApp:
             text-transform: uppercase;
             text-shadow: 0 0 20px rgba(0, 217, 255, 0.5);
         }
-        
         .subtitle {
             color: #e8f4f8;
             text-align: center;
@@ -668,11 +592,7 @@ class SharkCalendarApp:
             text-transform: uppercase;
             opacity: 0.7;
         }
-        
-        .form-group {
-            margin-bottom: 25px;
-        }
-        
+        .form-group { margin-bottom: 25px; }
         .form-group label {
             display: block;
             margin-bottom: 8px;
@@ -682,7 +602,6 @@ class SharkCalendarApp:
             letter-spacing: 2px;
             text-transform: uppercase;
         }
-        
         .form-group input {
             width: 100%;
             padding: 15px;
@@ -694,13 +613,11 @@ class SharkCalendarApp:
             color: #e8f4f8;
             transition: all 0.3s;
         }
-        
         .form-group input:focus {
             outline: none;
             border-color: #00d9ff;
             box-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
         }
-        
         .btn-login {
             width: 100%;
             padding: 18px;
@@ -716,12 +633,10 @@ class SharkCalendarApp:
             letter-spacing: 3px;
             text-transform: uppercase;
         }
-        
         .btn-login:hover {
             transform: translateY(-2px);
             box-shadow: 0 10px 30px rgba(0, 217, 255, 0.4);
         }
-        
         .error {
             background: rgba(255, 71, 87, 0.2);
             color: #ff4757;
@@ -738,33 +653,27 @@ class SharkCalendarApp:
         <div class="shark-logo">🦈</div>
         <h1>APEX</h1>
         <p class="subtitle">Calendar System</p>
-        
         {% if error %}
         <div class="error">⚠ {{ error }}</div>
         {% endif %}
-        
         <form method="POST" action="/login">
             <div class="form-group">
                 <label for="username">Operator ID</label>
                 <input type="text" id="username" name="username" placeholder="Enter credentials" required autofocus>
             </div>
-            
             <div class="form-group">
                 <label for="password">Access Code</label>
                 <input type="password" id="password" name="password" placeholder="••••••••" required>
             </div>
-            
             <button type="submit" class="btn-login">▶ Dive In</button>
         </form>
     </div>
 </body>
-</html>
-        '''
+</html>'''
     
     def get_index_template(self) -> str:
         """Return HTML template for main page with cropping feature"""
-        return '''
-<!DOCTYPE html>
+        return '''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -775,7 +684,6 @@ class SharkCalendarApp:
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
         :root {
             --ocean-deep: #001a33;
             --ocean-mid: #003d5c;
@@ -785,173 +693,56 @@ class SharkCalendarApp:
             --danger-red: #ff4757;
             --neon-cyan: #00d9ff;
         }
-        
         body {
             font-family: 'Space Mono', monospace;
-            background: var(--ocean-deep);
+            background: linear-gradient(180deg, var(--ocean-deep) 0%, var(--ocean-mid) 50%, var(--ocean-light) 100%);
             min-height: 100vh;
-            overflow-x: hidden;
+            color: var(--foam-white);
             position: relative;
         }
-        
-        /* Animated background */
-        .ocean-bg {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(180deg, 
-                var(--ocean-deep) 0%, 
-                var(--ocean-mid) 50%, 
-                var(--ocean-light) 100%);
-            z-index: 0;
-        }
-        
-        .bubbles {
-            position: fixed;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
-            overflow: hidden;
-            pointer-events: none;
-        }
-        
-        .bubble {
-            position: absolute;
-            bottom: -100px;
-            background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.3), rgba(255,255,255,0.05));
-            border-radius: 50%;
-            opacity: 0.4;
-            animation: rise 15s infinite ease-in;
-        }
-        
-        .bubble:nth-child(1) { left: 10%; width: 25px; height: 25px; animation-delay: 0s; animation-duration: 12s; }
-        .bubble:nth-child(2) { left: 25%; width: 35px; height: 35px; animation-delay: 2s; animation-duration: 14s; }
-        .bubble:nth-child(3) { left: 50%; width: 20px; height: 20px; animation-delay: 4s; animation-duration: 10s; }
-        .bubble:nth-child(4) { left: 75%; width: 30px; height: 30px; animation-delay: 1s; animation-duration: 13s; }
-        .bubble:nth-child(5) { left: 85%; width: 45px; height: 45px; animation-delay: 3s; animation-duration: 16s; }
-        .bubble:nth-child(6) { left: 40%; width: 28px; height: 28px; animation-delay: 5s; animation-duration: 11s; }
-        
-        @keyframes rise {
-            0% { bottom: -100px; transform: translateX(0); }
-            50% { transform: translateX(50px); }
-            100% { bottom: 110%; transform: translateX(-50px); }
-        }
-        
-        .shark-silhouette {
-            position: fixed;
-            font-size: 100px;
-            opacity: 0.08;
-            animation: swim 30s infinite linear;
-            z-index: 1;
-            filter: blur(2px);
-            pointer-events: none;
-        }
-        
-        @keyframes swim {
-            0% { left: -150px; top: 20%; }
-            100% { left: 110%; top: 60%; }
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 20px;
-            position: relative;
-            z-index: 10;
-        }
-        
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; position: relative; z-index: 10; }
         .header {
             background: rgba(0, 26, 51, 0.85);
             backdrop-filter: blur(20px);
             border: 2px solid rgba(0, 217, 255, 0.3);
             border-radius: 12px;
-            color: var(--foam-white);
             padding: 30px;
+            margin-bottom: 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
             box-shadow: 0 0 40px rgba(0, 217, 255, 0.2);
-            position: relative;
-            overflow: hidden;
         }
-        
-        .header::before {
-            content: '🦈';
-            position: absolute;
-            font-size: 150px;
-            opacity: 0.05;
-            left: -20px;
-            top: -40px;
-            transform: rotate(-15deg);
-        }
-        
         .header h1 {
             font-family: 'Bebas Neue', cursive;
+            color: var(--neon-cyan);
             font-size: 3em;
             letter-spacing: 6px;
             text-transform: uppercase;
             text-shadow: 0 0 20px rgba(0, 217, 255, 0.5);
-            color: var(--neon-cyan);
         }
-        
-        .header-right {
-            display: flex;
-            align-items: center;
-            gap: 20px;
-            z-index: 1;
-        }
-        
-        .profile-section {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            background: rgba(0, 102, 161, 0.3);
-            padding: 10px 20px;
-            border-radius: 50px;
-            border: 2px solid rgba(0, 217, 255, 0.3);
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        
+        .header-right { display: flex; align-items: center; gap: 20px; }
         .profile-section:hover {
             background: rgba(0, 102, 161, 0.5);
             border-color: var(--neon-cyan);
             box-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
         }
-        
-        .profile-picture {
+        .profile-picture, .profile-placeholder {
             width: 50px;
             height: 50px;
             border-radius: 50%;
-            object-fit: cover;
             border: 3px solid var(--neon-cyan);
-            background: var(--foam-white);
             box-shadow: 0 0 15px rgba(0, 217, 255, 0.4);
         }
-        
+        .profile-picture { object-fit: cover; background: var(--foam-white); }
         .profile-placeholder {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
             background: var(--foam-white);
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 24px;
-            border: 3px solid var(--neon-cyan);
-            box-shadow: 0 0 15px rgba(0, 217, 255, 0.4);
         }
-        
-        .username {
-            font-weight: 700;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            font-size: 0.9em;
-        }
-        
+        .username { font-weight: 700; letter-spacing: 2px; text-transform: uppercase; font-size: 0.9em; }
         .logout-btn {
             padding: 12px 24px;
             background: rgba(0, 61, 92, 0.4);
@@ -965,15 +756,15 @@ class SharkCalendarApp:
             font-size: 0.85em;
             transition: all 0.3s;
             font-family: 'Space Mono', monospace;
+            text-decoration: none;
+            display: inline-block;
         }
-        
         .logout-btn:hover {
             background: var(--neon-cyan);
             color: var(--ocean-deep);
             transform: translateY(-2px);
             box-shadow: 0 5px 20px rgba(0, 217, 255, 0.4);
         }
-        
         .controls {
             background: rgba(0, 26, 51, 0.85);
             backdrop-filter: blur(20px);
@@ -988,13 +779,6 @@ class SharkCalendarApp:
             gap: 15px;
             box-shadow: 0 0 40px rgba(0, 217, 255, 0.2);
         }
-        
-        .controls-left {
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-        
         .btn {
             padding: 14px 28px;
             border: 2px solid var(--neon-cyan);
@@ -1006,35 +790,13 @@ class SharkCalendarApp:
             text-transform: uppercase;
             transition: all 0.3s;
             font-family: 'Space Mono', monospace;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(0, 217, 255, 0.3), transparent);
-            transition: left 0.5s;
-        }
-        
-        .btn:hover::before {
-            left: 100%;
-        }
-        
-        .btn-primary {
             background: linear-gradient(135deg, var(--ocean-light) 0%, var(--ocean-mid) 100%);
             color: var(--foam-white);
         }
-        
-        .btn-primary:hover {
+        .btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 5px 20px rgba(0, 217, 255, 0.4);
         }
-        
         .calendar-view {
             background: rgba(0, 26, 51, 0.85);
             backdrop-filter: blur(20px);
@@ -1044,329 +806,6 @@ class SharkCalendarApp:
             margin-bottom: 20px;
             box-shadow: 0 0 40px rgba(0, 217, 255, 0.2);
         }
-        
-        .calendar-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 25px;
-        }
-        
-        .calendar-header h2 {
-            font-family: 'Bebas Neue', cursive;
-            color: var(--neon-cyan);
-            font-size: 2em;
-            letter-spacing: 3px;
-        }
-        
-        .calendar-nav {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-        
-        .nav-btn {
-            padding: 10px 16px;
-            background: rgba(0, 102, 161, 0.3);
-            border: 2px solid rgba(0, 217, 255, 0.3);
-            color: var(--foam-white);
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 700;
-            transition: all 0.3s;
-            font-family: 'Space Mono', monospace;
-        }
-        
-        .nav-btn:hover {
-            background: rgba(0, 102, 161, 0.5);
-            border-color: var(--neon-cyan);
-            box-shadow: 0 0 15px rgba(0, 217, 255, 0.3);
-        }
-        
-        .calendar-grid-month {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            gap: 8px;
-        }
-        
-        .calendar-day-header {
-            text-align: center;
-            padding: 12px;
-            font-weight: 700;
-            color: var(--neon-cyan);
-            font-size: 0.85em;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-        }
-        
-        .calendar-day {
-            min-height: 120px;
-            background: rgba(0, 61, 92, 0.3);
-            border: 2px solid rgba(0, 217, 255, 0.2);
-            border-radius: 8px;
-            padding: 8px;
-            cursor: pointer;
-            transition: all 0.3s;
-            position: relative;
-        }
-        
-        .calendar-day:hover {
-            background: rgba(0, 61, 92, 0.5);
-            border-color: var(--neon-cyan);
-            box-shadow: 0 0 15px rgba(0, 217, 255, 0.2);
-        }
-        
-        .calendar-day.other-month {
-            opacity: 0.3;
-        }
-        
-        .calendar-day.today {
-            border-color: var(--neon-cyan);
-            box-shadow: 0 0 20px rgba(0, 217, 255, 0.4);
-        }
-        
-        .day-number {
-            font-weight: 700;
-            color: var(--foam-white);
-            margin-bottom: 6px;
-            font-size: 0.9em;
-        }
-        
-        .calendar-day.today .day-number {
-            color: var(--neon-cyan);
-            font-size: 1.1em;
-        }
-        
-        .day-events {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-        
-        .day-event {
-            background: rgba(0, 217, 255, 0.2);
-            border-left: 3px solid var(--neon-cyan);
-            padding: 4px 6px;
-            border-radius: 3px;
-            font-size: 0.75em;
-            color: var(--foam-white);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .day-event:hover {
-            background: rgba(0, 217, 255, 0.3);
-            transform: translateX(2px);
-        }
-        
-        .event-tag {
-            display: inline-block;
-            padding: 2px 6px;
-            background: rgba(0, 217, 255, 0.3);
-            border-radius: 3px;
-            font-size: 0.7em;
-            margin-left: 4px;
-        }
-        
-        .view-toggle {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .view-toggle button {
-            padding: 8px 16px;
-            background: rgba(0, 61, 92, 0.4);
-            border: 2px solid rgba(0, 217, 255, 0.2);
-            color: var(--foam-white);
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 700;
-            font-size: 0.85em;
-            transition: all 0.3s;
-            font-family: 'Space Mono', monospace;
-        }
-        
-        .view-toggle button.active {
-            background: rgba(0, 102, 161, 0.5);
-            border-color: var(--neon-cyan);
-            color: var(--neon-cyan);
-        }
-        
-        .view-toggle button:hover {
-            border-color: var(--neon-cyan);
-        }
-        
-        .tags-input-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            padding: 8px;
-            background: rgba(0, 61, 92, 0.4);
-            border: 2px solid rgba(0, 217, 255, 0.2);
-            border-radius: 8px;
-            min-height: 45px;
-            transition: all 0.3s;
-        }
-        
-        .tags-input-container:focus-within {
-            border-color: var(--neon-cyan);
-            box-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
-        }
-        
-        .tag-item {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 12px;
-            background: rgba(0, 217, 255, 0.2);
-            border: 1px solid var(--neon-cyan);
-            color: var(--foam-white);
-            border-radius: 20px;
-            font-size: 0.85em;
-            font-weight: 600;
-        }
-        
-        .tag-remove {
-            cursor: pointer;
-            color: var(--danger-red);
-            font-weight: 700;
-            transition: all 0.2s;
-        }
-        
-        .tag-remove:hover {
-            transform: scale(1.2);
-        }
-        
-        .tag-input {
-            border: none;
-            background: transparent;
-            color: var(--foam-white);
-            outline: none;
-            flex: 1;
-            min-width: 120px;
-            font-family: 'Space Mono', monospace;
-            padding: 6px;
-        }
-        
-        .tag-input::placeholder {
-            color: rgba(232, 244, 248, 0.3);
-        }
-        
-        .tag-suggestions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 8px;
-        }
-        
-        .tag-suggestion {
-            padding: 6px 12px;
-            background: rgba(0, 61, 92, 0.3);
-            border: 1px solid rgba(0, 217, 255, 0.2);
-            color: var(--foam-white);
-            border-radius: 20px;
-            font-size: 0.8em;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .tag-suggestion:hover {
-            background: rgba(0, 217, 255, 0.2);
-            border-color: var(--neon-cyan);
-        }
-        
-        .controls {
-            background: rgba(0, 26, 51, 0.85);
-            backdrop-filter: blur(20px);
-            border: 2px solid rgba(0, 217, 255, 0.3);
-            border-radius: 12px;
-            padding: 20px 30px;
-            margin-bottom: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 15px;
-            box-shadow: 0 0 40px rgba(0, 217, 255, 0.2);
-        }
-        
-        .controls-left {
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-        
-        .list-view {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 20px;
-            padding-bottom: 40px;
-        }
-            background: rgba(0, 26, 51, 0.85);
-            backdrop-filter: blur(20px);
-            border: 2px solid rgba(0, 217, 255, 0.3);
-            border-radius: 12px;
-            padding: 25px;
-            transition: all 0.3s;
-            cursor: pointer;
-            position: relative;
-            overflow: hidden;
-            box-shadow: 0 0 30px rgba(0, 217, 255, 0.15);
-        }
-        
-        .event-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 5px;
-            height: 100%;
-            background: linear-gradient(180deg, var(--neon-cyan) 0%, var(--ocean-light) 100%);
-        }
-        
-        .event-card:hover {
-            transform: translateY(-5px);
-            border-color: var(--neon-cyan);
-            box-shadow: 0 10px 40px rgba(0, 217, 255, 0.3);
-        }
-        
-        .event-card h3 {
-            color: var(--neon-cyan);
-            margin-bottom: 12px;
-            font-size: 1.5em;
-            font-family: 'Bebas Neue', cursive;
-            letter-spacing: 2px;
-        }
-        
-        .event-card .shark-badge {
-            display: inline-block;
-            padding: 6px 14px;
-            background: rgba(0, 217, 255, 0.2);
-            color: var(--neon-cyan);
-            border: 1px solid var(--neon-cyan);
-            border-radius: 20px;
-            font-size: 0.8em;
-            font-weight: 700;
-            margin-bottom: 12px;
-            letter-spacing: 1px;
-        }
-        
-        .event-card .date-time {
-            color: var(--foam-white);
-            font-size: 0.9em;
-            margin: 10px 0;
-            opacity: 0.8;
-        }
-        
-        .event-card .description {
-            color: var(--foam-white);
-            line-height: 1.6;
-            opacity: 0.7;
-        }
-        
         .modal {
             display: none;
             position: fixed;
@@ -1379,11 +818,7 @@ class SharkCalendarApp:
             align-items: center;
             justify-content: center;
         }
-        
-        .modal.active {
-            display: flex;
-        }
-        
+        .modal.active { display: flex; }
         .modal-content {
             background: rgba(0, 26, 51, 0.95);
             backdrop-filter: blur(20px);
@@ -1396,7 +831,6 @@ class SharkCalendarApp:
             overflow-y: auto;
             box-shadow: 0 0 60px rgba(0, 217, 255, 0.3);
         }
-        
         .modal-content h2 {
             font-family: 'Bebas Neue', cursive;
             color: var(--neon-cyan);
@@ -1405,11 +839,7 @@ class SharkCalendarApp:
             margin-bottom: 25px;
             text-shadow: 0 0 15px rgba(0, 217, 255, 0.5);
         }
-        
-        .form-group {
-            margin-bottom: 20px;
-        }
-        
+        .form-group { margin-bottom: 20px; }
         .form-group label {
             display: block;
             margin-bottom: 8px;
@@ -1419,10 +849,7 @@ class SharkCalendarApp:
             letter-spacing: 2px;
             text-transform: uppercase;
         }
-        
-        .form-group input,
-        .form-group textarea,
-        .form-group select {
+        .form-group input, .form-group textarea {
             width: 100%;
             padding: 12px;
             background: rgba(0, 61, 92, 0.4);
@@ -1433,20 +860,26 @@ class SharkCalendarApp:
             font-family: 'Space Mono', monospace;
             transition: all 0.3s;
         }
-        
-        .form-group input::placeholder,
-        .form-group textarea::placeholder {
-            color: rgba(232, 244, 248, 0.3);
-        }
-        
-        .form-group input:focus,
-        .form-group textarea:focus,
-        .form-group select:focus {
+        .form-group input:focus, .form-group textarea:focus {
             outline: none;
             border-color: var(--neon-cyan);
             box-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
         }
-        
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 25px;
+        }
+        .btn-secondary {
+            background: rgba(128, 139, 150, 0.3);
+            color: var(--foam-white);
+            border: 2px solid var(--shark-grey);
+        }
+        .btn-secondary:hover {
+            background: var(--shark-grey);
+            transform: translateY(-2px);
+        }
         .crop-container {
             max-width: 100%;
             max-height: 400px;
@@ -1455,62 +888,53 @@ class SharkCalendarApp:
             border-radius: 8px;
             overflow: hidden;
         }
-        
-        .crop-container img {
-            max-width: 100%;
+        .crop-container img { max-width: 100%; }
+        .list-view {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            padding-bottom: 40px;
         }
-        
-        .profile-preview {
-            text-align: center;
-            margin: 20px 0;
+        .event-card {
+            background: rgba(0, 26, 51, 0.85);
+            backdrop-filter: blur(20px);
+            border: 2px solid rgba(0, 217, 255, 0.3);
+            border-radius: 12px;
+            padding: 25px;
+            transition: all 0.3s;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 30px rgba(0, 217, 255, 0.15);
         }
-        
-        .profile-preview img {
-            width: 150px;
-            height: 150px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 4px solid var(--neon-cyan);
-            box-shadow: 0 0 30px rgba(0, 217, 255, 0.4);
+        .event-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--neon-cyan);
+            box-shadow: 0 10px 40px rgba(0, 217, 255, 0.3);
         }
-        
-        .btn-secondary {
-            background: rgba(128, 139, 150, 0.3);
+        .event-card h3 {
+            color: var(--neon-cyan);
+            margin-bottom: 12px;
+            font-size: 1.5em;
+            font-family: 'Bebas Neue', cursive;
+            letter-spacing: 2px;
+        }
+        .event-card .date-time {
             color: var(--foam-white);
-            border: 2px solid var(--shark-grey);
+            font-size: 0.9em;
+            margin: 10px 0;
+            opacity: 0.8;
         }
-        
-        .btn-secondary:hover {
-            background: var(--shark-grey);
-            transform: translateY(-2px);
+        .event-card .description {
+            color: var(--foam-white);
+            line-height: 1.6;
+            opacity: 0.7;
         }
-        
-        .form-actions {
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-            margin-top: 25px;
-        }
-        
         .empty-state {
             text-align: center;
             padding: 80px 20px;
             color: var(--foam-white);
-            grid-column: 1 / -1;
         }
-        
-        .empty-state .shark-emoji {
-            font-size: 120px;
-            margin-bottom: 20px;
-            opacity: 0.3;
-            animation: float 4s ease-in-out infinite;
-        }
-        
-        @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-20px); }
-        }
-        
         .empty-state h2 {
             font-family: 'Bebas Neue', cursive;
             font-size: 2.5em;
@@ -1518,43 +942,284 @@ class SharkCalendarApp:
             letter-spacing: 4px;
             margin-bottom: 15px;
         }
-        
-        .empty-state p {
-            opacity: 0.7;
-            font-size: 1.1em;
-        }
-        
-        /* Custom scrollbar */
-        ::-webkit-scrollbar {
-            width: 10px;
-        }
-        
-        ::-webkit-scrollbar-track {
-            background: var(--ocean-deep);
-        }
-        
-        ::-webkit-scrollbar-thumb {
-            background: var(--ocean-light);
-            border-radius: 5px;
-        }
-        
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--neon-cyan);
-        }
-        
-        @media (max-width: 768px) {
-            .header {
-                flex-direction: column;
-                gap: 20px;
-                text-align: center;
-            }
-            
-            .header h1 {
-                font-size: 2em;
-            }
-            
-            .list-view {
-                grid-template-columns: 1fr;
-            }
-        }
     </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🦈 Shark Calendar</h1>
+            <div class="header-right">
+                <div class="profile-section" onclick="openProfileModal()">
+                    {% if profile_picture %}
+                    <img src="{{ profile_picture }}" class="profile-picture" alt="Profile">
+                    {% else %}
+                    <div class="profile-placeholder">👤</div>
+                    {% endif %}
+                    <span class="username">{{ username }}</span>
+                </div>
+                <a href="/logout" class="logout-btn">Logout</a>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button class="btn" onclick="openEventModal()">+ New Event</button>
+        </div>
+        
+        <div class="calendar-view">
+            <div id="eventsList" class="list-view"></div>
+        </div>
+    </div>
+    
+    <!-- Event Modal -->
+    <div id="eventModal" class="modal">
+        <div class="modal-content">
+            <h2>🦈 Create Event</h2>
+            <form id="eventForm">
+                <div class="form-group">
+                    <label for="eventTitle">Event Title</label>
+                    <input type="text" id="eventTitle" required>
+                </div>
+                <div class="form-group">
+                    <label for="eventDescription">Description</label>
+                    <textarea id="eventDescription" rows="4"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="eventDate">Date</label>
+                    <input type="date" id="eventDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="eventTime">Time</label>
+                    <input type="time" id="eventTime" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEventModal()">Cancel</button>
+                    <button type="submit" class="btn">Create Event</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Profile Modal -->
+    <div id="profileModal" class="modal">
+        <div class="modal-content">
+            <h2>🦈 Profile Picture</h2>
+            <input type="file" id="profileFileInput" accept="image/*" style="margin-bottom: 20px;">
+            <div id="cropContainer" class="crop-container" style="display: none;">
+                <img id="cropImage">
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeProfileModal()">Cancel</button>
+                <button type="button" id="saveCropBtn" class="btn" style="display: none;">Save Picture</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+    <script>
+        let cropper = null;
+        
+        async function loadEvents() {
+            try {
+                const response = await fetch('/api/events');
+                const events = await response.json();
+                
+                const container = document.getElementById('eventsList');
+                
+                if (events.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div style="font-size: 120px; opacity: 0.3;">🦈</div>
+                            <h2>No Events Yet</h2>
+                            <p>Create your first shark-themed event!</p>
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = events.map(event => `
+                        <div class="event-card" onclick="viewEvent(${event.id})">
+                            <h3>${event.title}</h3>
+                            <div class="date-time">📅 ${event.event_date} ${event.event_time || ''}</div>
+                            <div class="description">${event.description || 'No description'}</div>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error loading events:', error);
+            }
+        }
+        
+        function openEventModal() {
+            document.getElementById('eventModal').classList.add('active');
+        }
+        
+        function closeEventModal() {
+            document.getElementById('eventModal').classList.remove('active');
+            document.getElementById('eventForm').reset();
+        }
+        
+        function openProfileModal() {
+            document.getElementById('profileModal').classList.add('active');
+        }
+        
+        function closeProfileModal() {
+            document.getElementById('profileModal').classList.remove('active');
+            
+            if (cropper) {
+                cropper.destroy();
+                cropper = null;
+            }
+            
+            document.getElementById('profileFileInput').value = '';
+            document.getElementById('cropContainer').style.display = 'none';
+            document.getElementById('saveCropBtn').style.display = 'none';
+        }
+        
+        document.getElementById('profileFileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const img = document.getElementById('cropImage');
+                    img.src = event.target.result;
+                    document.getElementById('cropContainer').style.display = 'block';
+                    document.getElementById('saveCropBtn').style.display = 'block';
+                    
+                    if (cropper) {
+                        cropper.destroy();
+                    }
+                    
+                    cropper = new Cropper(img, {
+                        aspectRatio: 1,
+                        viewMode: 2,
+                        autoCropArea: 1,
+                        scalable: true,
+                        zoomable: true
+                    });
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+        
+        document.getElementById('saveCropBtn').addEventListener('click', async function() {
+            if (cropper) {
+                const canvas = cropper.getCroppedCanvas({ width: 200, height: 200 });
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                
+                try {
+                    const response = await fetch('/api/profile-picture', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ picture: dataUrl })
+                    });
+                    
+                    if (response.ok) {
+                        location.reload();
+                    } else {
+                        alert('Failed to save profile picture');
+                    }
+                } catch (error) {
+                    alert('Failed to save profile picture');
+                }
+            }
+        });
+        
+        document.getElementById('eventForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const data = {
+                title: document.getElementById('eventTitle').value,
+                description: document.getElementById('eventDescription').value,
+                event_date: document.getElementById('eventDate').value,
+                event_time: document.getElementById('eventTime').value,
+                tags: '[]'
+            };
+            
+            try {
+                const response = await fetch('/api/events', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    closeEventModal();
+                    await loadEvents();
+                    document.getElementById('eventForm').reset();
+                } else {
+                    alert('Failed to create event');
+                }
+            } catch (error) {
+                alert('Failed to create event');
+            }
+        });
+        
+        function viewEvent(id) {
+            console.log('View event:', id);
+        }
+        
+        loadEvents();
+    </script>
+</body>
+</html>'''
+
+
+# Main entry point
+async def init_app():
+    """Initialize and return the app"""
+    logger.info("=" * 80)
+    logger.info("🦈 SHARK CALENDAR SYSTEM - STARTING UP")
+    logger.info("=" * 80)
+    
+    try:
+        env_vars = load_environment()
+        shark_app = SharkCalendarApp(env_vars)
+        await shark_app.db.initialize_tables()
+        
+        logger.info("=" * 80)
+        logger.info("✅ SHARK CALENDAR SYSTEM - READY")
+        logger.info("=" * 80)
+        
+        return shark_app.app
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize application: {e}")
+        raise
+
+
+if __name__ == '__main__':
+    import sys
+    
+    try:
+        env_vars = load_environment()
+        shark_app = SharkCalendarApp(env_vars)
+        
+        async def startup(app):
+            await shark_app.db.initialize_tables()
+        
+        shark_app.app.on_startup.append(startup)
+        
+        host = env_vars['APP_HOST']
+        port = int(env_vars['APP_PORT'])
+        
+        logger.info("=" * 80)
+        logger.info(f"🌊 Starting server on {host}:{port}")
+        logger.info("=" * 80)
+        
+        web.run_app(shark_app.app, host=host, port=port)
+        
+    except KeyboardInterrupt:
+        logger.info("\n🛑 Shutting down gracefully...")
+        sys.exit(0)
+    except Exception as e:
+        logger.error(f"❌ Fatal error: {e}")
+        sys.exit(1)section {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            background: rgba(0, 102, 161, 0.3);
+            padding: 10px 20px;
+            border-radius: 50px;
+            border: 2px solid rgba(0, 217, 255, 0.3);
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .profile-
