@@ -390,11 +390,10 @@ class SharkCalendarApp:
         logger.info("✅ Shark Calendar Application initialized successfully")
     
     def setup_session(self):
-        """Setup simple session storage"""
-        logger.info("🔐 Configuring session storage...")
-        from aiohttp_session.cookie_storage import SimpleCookieStorage
-        setup(self.app, SimpleCookieStorage())
-        logger.info("✅ Session storage configured")
+    """Setup simple session storage"""
+    logger.info("🔐 Configuring session storage...")
+    setup(self.app, SimpleCookieStorage())
+    logger.info("✅ Session storage configured")
     
     def setup_routes(self):
         """Setup application routes"""
