@@ -1159,7 +1159,8 @@ class SharkCalendarApp:
         loadEvents();
     </script>
 </body>
-</html>'''
+</html>"""
+        return template
 
 
 # Main entry point
