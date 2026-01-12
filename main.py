@@ -673,7 +673,7 @@ class SharkCalendarApp:
     
     def get_index_template(self) -> str:
         """Return HTML template for main page with cropping feature"""
-        return r'''<!DOCTYPE html>
+        template = r'''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1159,7 +1159,7 @@ class SharkCalendarApp:
         loadEvents();
     </script>
 </body>
-</html>"""
+</html>'''
         return template
 
 
@@ -1212,15 +1212,4 @@ if __name__ == '__main__':
         sys.exit(0)
     except Exception as e:
         logger.error(f"❌ Fatal error: {e}")
-        sys.exit(1)section {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            background: rgba(0, 102, 161, 0.3);
-            padding: 10px 20px;
-            border-radius: 50px;
-            border: 2px solid rgba(0, 217, 255, 0.3);
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        .profile-
+        sys.exit(1)
