@@ -468,7 +468,7 @@ class SharkCalendarApp:
         """Public health check endpoint"""
         return web.json_response({
             'status': 'ok',
-            'service': 'Shark Calendar API',
+            'service': 'APEX Calendar API',
             'timestamp': datetime.now().isoformat(),
             'message': '🦈 Swimming smoothly!'
         })
@@ -527,7 +527,7 @@ class SharkCalendarApp:
         now = datetime.now()
 
         return {
-            'title': 'Shark Calendar 🦈',
+            'title': 'APEX Calendar System',
             'username': username,
             'profile_picture': profile_pic,
             'year': now.year,
@@ -632,13 +632,13 @@ class SharkCalendarApp:
             return web.json_response({'error': str(e)}, status=400)
 
     def get_login_template(self) -> str:
-        """Return HTML template for login page"""
+        """Return HTML template for login page (unchanged design but label adjusted earlier)"""
         return '''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🦈 Shark Calendar - Login</title>
+    <title>🦈 APEX - Login</title>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
@@ -762,7 +762,7 @@ class SharkCalendarApp:
 </html>'''
 
     def get_index_template(self) -> str:
-        """Return HTML template for main page with enhanced month layout and platforms support."""
+        """Return HTML template for main page with holographic icons for platforms"""
         template = r'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -772,70 +772,79 @@ class SharkCalendarApp:
 <link rel="icon" href="/favicon.ico" type="image/x-icon">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
-/* Layout: left sidebar with month, right main calendar laid out horizontally like Google Calendar */
+/* Keep the holographic underwater theme CSS from the previous version */
 :root{
-  --bg:#001a33; --mid:#003d5c; --light:#0066a1; --cyan:#00d9ff; --text:#e8f4f8;
+  --bg-dark:#001428;
+  --bg-mid:#002b44;
+  --bg-light:#00557a;
+  --neon:#00e5ff;
+  --accent:#6bf0ff;
+  --glass: rgba(255,255,255,0.04);
+  --card: rgba(0,26,51,0.6);
+  --text: #e8f4f8;
 }
-body { margin:0; font-family:'Space Mono',monospace; background:linear-gradient(180deg,var(--bg),var(--mid),var(--light)); color:var(--text); min-height:100vh; }
-.app { max-width:1400px; margin:20px auto; display:flex; gap:16px; padding:12px; }
-.sidebar { width:260px; background:rgba(0,26,51,0.85); border-radius:10px; padding:12px; border:1px solid rgba(0,217,255,0.06); }
-.main { flex:1; background:rgba(0,26,51,0.85); border-radius:10px; padding:12px; border:1px solid rgba(0,217,255,0.06); }
-.header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
-.h1 { font-family:'Bebas Neue',cursive; font-size:22px; color:var(--cyan); letter-spacing:2px; }
-.controls { display:flex; gap:8px; align-items:center; }
-.btn{ background:rgba(0,61,92,0.5); color:var(--text); border:none; padding:8px 10px; border-radius:8px; cursor:pointer; }
-.btn-secondary{ background:rgba(128,139,150,0.12); }
-.mini-month { margin-bottom:12px; }
-.weekdays { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin-bottom:6px; }
-.weekday{ text-align:center; font-weight:700; color:rgba(255,255,255,0.85); font-size:12px; }
-.calendar-grid { display:grid; grid-template-columns: 120px 1fr; gap:12px; }
-/* left column is day list, right is a wide horizontal grid of days for weeks */
-.day-list { width:120px; display:flex; flex-direction:column; gap:6px; }
-.day-item { background:rgba(0,26,51,0.75); padding:8px; border-radius:6px; font-weight:700; text-align:center; border:1px solid rgba(0,217,255,0.03); }
-.weeks { flex:1; display:flex; gap:6px; overflow:auto; padding-bottom:6px; }
-/* each week is a vertical column */
-.week-col { min-width:200px; background:rgba(0,26,51,0.6); border-radius:8px; padding:8px; display:flex; flex-direction:column; gap:8px; border:1px solid rgba(0,217,255,0.02); }
-.week-day { min-height:80px; padding:6px; border-radius:6px; background:rgba(0,26,51,0.85); position:relative; border:1px dashed rgba(0,217,255,0.02); }
-/* event cards shown inside day box */
-.event-card { background:rgba(0,217,255,0.06); border-radius:6px; padding:6px 8px; font-size:13px; margin-bottom:6px; cursor:pointer; border:1px solid rgba(0,217,255,0.04); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.event-card .meta { font-size:11px; color:rgba(255,255,255,0.8); margin-top:4px; }
-.tag { display:inline-block; padding:2px 6px; border-radius:6px; font-size:11px; color:var(--cyan); border:1px solid rgba(0,217,255,0.06); margin-right:6px; background:rgba(0,217,255,0.02); }
+html,body { height:100%; margin:0; font-family:'Space Mono',monospace; color:var(--text); background: radial-gradient(1200px 600px at 10% 10%, rgba(0,80,120,0.12), transparent), linear-gradient(180deg,var(--bg-dark),var(--bg-mid) 40%, var(--bg-light)); overflow:auto; }
+.wrapper { max-width:1300px; margin:24px auto; padding:18px; display:flex; gap:18px; }
+.sidebar { width:260px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:12px; padding:16px; border:1px solid rgba(0,229,255,0.06); box-shadow: 0 8px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.02); backdrop-filter: blur(6px); }
+.main { flex:1; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:12px; padding:14px; border:1px solid rgba(0,229,255,0.04); box-shadow: 0 10px 40px rgba(0,0,0,0.4); backdrop-filter: blur(6px); position:relative; overflow:hidden; }
+.header-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+.brand { display:flex; align-items:center; gap:12px; }
+.brand .logo { font-size:48px; transform:translateY(4px); }
+.brand .title h1 { font-family:'Bebas Neue',cursive; color:var(--neon); font-size:34px; margin:0; letter-spacing:6px; text-transform:uppercase; text-shadow: 0 0 28px rgba(0,229,255,0.25); }
+.brand .title .subtitle { font-size:12px; color: rgba(232,244,248,0.8); letter-spacing:2px; margin-top:2px; text-transform:uppercase; }
+.controls { display:flex; gap:10px; align-items:center; }
+.btn { background: linear-gradient(135deg, rgba(0,85,120,0.25), rgba(0,30,50,0.35)); color:var(--text); border:1px solid rgba(0,229,255,0.12); padding:8px 12px; border-radius:10px; cursor:pointer; box-shadow: 0 6px 18px rgba(0,229,255,0.04), inset 0 1px 0 rgba(255,255,255,0.02); }
+.mini { background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005)); border-radius:10px; padding:10px; border:1px solid rgba(0,229,255,0.03); }
+.weekdays { display:grid; grid-template-columns: repeat(7,1fr); gap:6px; margin-bottom:6px; }
+.weekdays .day { text-align:center; font-weight:700; color:rgba(255,255,255,0.8); font-size:12px; }
+.week-columns { display:flex; gap:10px; overflow:auto; padding-bottom:6px; }
+.week { min-width:220px; background: linear-gradient(180deg, rgba(255,255,255,0.006), rgba(255,255,255,0.004)); border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:8px; border:1px solid rgba(0,229,255,0.02); }
+.day { min-height:110px; background: rgba(0,0,0,0.02); border-radius:8px; padding:8px; position:relative; border:1px dashed rgba(0,229,255,0.02); }
+.date-pill { position:absolute; left:8px; top:8px; color:var(--neon); font-weight:700; }
+.event { background: linear-gradient(135deg, rgba(0,229,255,0.06), rgba(0,100,140,0.06)); border-radius:8px; padding:8px 10px; font-size:13px; color:var(--text); margin-bottom:6px; cursor:pointer; border:1px solid rgba(0,229,255,0.06); box-shadow: 0 6px 20px rgba(0,229,255,0.03); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:flex; gap:8px; align-items:center; }
+.event .meta { font-size:11px; color: rgba(255,255,255,0.8); margin-top:4px; }
+.tag { display:inline-block; padding:2px 6px; border-radius:6px; font-size:11px; color:var(--neon); border:1px solid rgba(0,217,255,0.06); margin-right:6px; background:rgba(0,217,255,0.02); }
 .platform { display:inline-block; padding:2px 6px; border-radius:6px; font-size:11px; color:#ffd; border:1px solid rgba(255,255,255,0.03); margin-left:6px; background:rgba(255,255,255,0.02); }
-/* modals */
-.modal { display:none; position:fixed; inset:0; align-items:center; justify-content:center; background:rgba(0,0,0,0.6); z-index:999; }
-.modal.active{ display:flex; }
-.modal-box { background:rgba(0,26,51,0.98); padding:16px; border-radius:8px; width:520px; max-width:96%; border:1px solid rgba(0,217,255,0.05); }
-.form-row { margin-bottom:10px; }
-input[type="text"], input[type="date"], textarea, select { width:100%; padding:8px; border-radius:6px; background:rgba(0,61,92,0.4); color:var(--text); border:1px solid rgba(0,217,255,0.06); }
+.plat-icon { width:18px; height:18px; object-fit:contain; border-radius:4px; }
+.modal { display:none; position:fixed; inset:0; align-items:center; justify-content:center; background:linear-gradient(180deg, rgba(0,10,20,0.6), rgba(0,0,0,0.6)); z-index:2000; }
+.modal.active { display:flex; }
+.modal-box { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding:16px; border-radius:10px; border:1px solid rgba(0,229,255,0.04); width:520px; max-width:96%; }
 .small { font-size:12px; color:rgba(255,255,255,0.8); }
+@media (max-width:980px){ .wrapper{ flex-direction:column; padding:10px; } .sidebar{ order:2; width:100%; } .main{ order:1; } }
 </style>
 </head>
 <body>
 <div style="max-width:1200px;margin:12px auto;color:var(--text);display:flex;justify-content:space-between;align-items:center;">
-  <div style="font-family:'Bebas Neue',cursive;font-size:26px;color:var(--cyan);">🦈 Shark Calendar</div>
+  <div class="brand">
+    <div class="logo">🦈</div>
+    <div class="title">
+      <h1>APEX</h1>
+      <div class="subtitle">Calendar System</div>
+    </div>
+  </div>
   <div style="display:flex;gap:12px;align-items:center;">
     <div style="cursor:pointer;" onclick="openProfileModal()">
       {% if profile_picture %}
-        <img src="{{ profile_picture }}" style="width:40px;height:40px;border-radius:50%;border:2px solid var(--cyan)" alt="pfp">
+        <img src="{{ profile_picture }}" style="width:40px;height:40px;border-radius:50%;border:2px solid var(--neon)" alt="pfp">
       {% else %}
         <div style="width:40px;height:40px;border-radius:50%;background:#e8f4f8;display:flex;align-items:center;justify-content:center">👤</div>
       {% endif %}
     </div>
-    <div style="font-weight:700;color:var(--cyan)">{{ username }}</div>
+    <div style="font-weight:700;color:var(--neon)">{{ username }}</div>
     <a href="/logout" class="btn">Logout</a>
   </div>
 </div>
 
-<div class="app">
+<div class="wrapper">
   <div class="sidebar">
-    <div class="mini-month">
+    <div class="mini">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <button class="btn" onclick="prevMonth()">◀</button>
-        <div style="font-weight:700;color:var(--cyan)"; id="sidebarMonthTitle">Month Year</div>
+        <div class="month-name" id="sidebarMonthTitle">Month Year</div>
         <button class="btn" onclick="nextMonth()">▶</button>
       </div>
       <div class="weekdays">
-        <div class="weekday">M</div><div class="weekday">T</div><div class="weekday">W</div><div class="weekday">T</div><div class="weekday">F</div><div class="weekday">S</div><div class="weekday">S</div>
+        <div class="day">M</div><div class="day">T</div><div class="day">W</div><div class="day">T</div><div class="day">F</div><div class="day">S</div><div class="day">S</div>
       </div>
       <div id="miniGrid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;"></div>
     </div>
@@ -845,31 +854,30 @@ input[type="text"], input[type="date"], textarea, select { width:100%; padding:8
       <button class="btn" onclick="openEventModal()">+ New Event</button>
       <div style="margin-top:12px;">
         <div style="font-weight:700;margin-bottom:6px;">Platforms</div>
-        {% for p in platforms %}
-          <div class="small">• {{ p }}</div>
-        {% endfor %}
+        <div id="platformList">
+          <!-- will be filled with icons and names via JS -->
+        </div>
       </div>
     </div>
   </div>
 
   <div class="main">
-    <div class="header">
-      <div class="h1" id="mainMonthTitle">Month Year</div>
+    <div class="header-top">
+      <div class="month-title" id="mainMonthTitle">Month Year</div>
       <div class="controls">
-        <button class="btn" onclick="toggleView()">Toggle View</button>
+        <button class="btn ghost" onclick="toggleView()">Toggle View</button>
       </div>
     </div>
 
-    <div class="calendar-grid">
-      <div class="day-list" id="dayList">
-        <!-- left sidebar days (Mon, Tue, ...) -->
+    <div class="weeks-wrap">
+      <div class="month-controls">
+        <div class="small">Week columns — scroll horizontally to see more weeks</div>
+        <div class="small">Holographic • Underwater • Futuristic</div>
       </div>
-
-      <div class="weeks" id="weeksContainer">
-        <!-- weeks will be appended as columns; each column contains 7 day boxes showing events -->
+      <div class="week-columns" id="weeksContainer">
+        <!-- week columns appended by JS -->
       </div>
     </div>
-
   </div>
 </div>
 
@@ -890,7 +898,6 @@ input[type="text"], input[type="date"], textarea, select { width:100%; padding:8
         <label class="small">Date</label>
         <input id="eventDate" type="date" required>
       </div>
-
       <div class="form-row">
         <label class="small">Pick Tags (Ctrl/Cmd to multi-select)</label>
         <select id="eventTags" multiple size="5">
@@ -899,12 +906,10 @@ input[type="text"], input[type="date"], textarea, select { width:100%; padding:8
           {% endfor %}
         </select>
       </div>
-
       <div class="form-row">
         <label class="small">Custom tags (comma separated)</label>
         <input id="customTags" type="text" placeholder="urgent,side-project">
       </div>
-
       <div class="form-row">
         <label class="small">Platforms (choose or add)</label>
         <select id="eventPlatforms" multiple size="6">
@@ -913,12 +918,10 @@ input[type="text"], input[type="date"], textarea, select { width:100%; padding:8
           {% endfor %}
         </select>
       </div>
-
       <div class="form-row">
         <label class="small">Custom platforms (comma separated)</label>
         <input id="customPlatforms" type="text" placeholder="e.g. itch, blender">
       </div>
-
       <div style="display:flex;justify-content:flex-end;gap:8px;">
         <button type="button" class="btn btn-secondary" onclick="closeEventModal()">Cancel</button>
         <button type="submit" class="btn">Create</button>
@@ -943,7 +946,7 @@ input[type="text"], input[type="date"], textarea, select { width:100%; padding:8
   </div>
 </div>
 
-<!-- Profile Modal (cropping omitted for brevity, kept as before) -->
+<!-- Profile Modal -->
 <div id="profileModal" class="modal">
   <div class="modal-box">
     <h3>Profile Picture</h3>
@@ -957,6 +960,16 @@ input[type="text"], input[type="date"], textarea, select { width:100%; padding:8
 </div>
 
 <script>
+// platform icons mapping (from the URLs you provided)
+const platformIcons = {
+  "GitHub": "https://pngimg.com/uploads/github/github_PNG40.png",
+  "Roblox": "https://clipartcraft.com/images/roblox-logo-transparent-black.png",
+  "Teams": "https://www.pngall.com/wp-content/uploads/15/Microsoft-Teams-Logo-No-Background.png",
+  "Discord": "https://www.pngall.com/wp-content/uploads/13/Discord-Logo-PNG-Pic.png",
+  "YouTube": "https://www.freepnglogos.com/uploads/youtube-logo-icon-transparent---32.png",
+  "Twitch": "https://pngimg.com/uploads/twitch/twitch_PNG48.png"
+};
+
 const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 let currentYear = {{ cur_year }};
 let currentMonth = {{ cur_month }}; // 1-12
@@ -966,109 +979,121 @@ function escapeHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;')
 
 async function fetchEvents(){ const r = await fetch('/api/events'); if(!r.ok) return []; return r.json(); }
 
-async function loadEvents(){ eventsData = await fetchEvents(); renderCalendar(); renderSidebarMini(); }
+async function loadEvents(){ eventsData = await fetchEvents(); renderCalendar(); renderMini(); renderPlatformList(); }
+
+function renderPlatformList(){
+  const container = document.getElementById('platformList');
+  container.innerHTML = '';
+  const platforms = {{ platforms|tojson }};
+  platforms.forEach(p=>{
+    const div = document.createElement('div');
+    div.style.display='flex'; div.style.alignItems='center'; div.style.gap='8px'; div.style.marginBottom='6px';
+    const img = document.createElement('img'); img.className='plat-icon'; img.src = platformIcons[p] || '';
+    img.alt = p;
+    const span = document.createElement('div'); span.className='small'; span.innerText = p;
+    div.appendChild(img); div.appendChild(span);
+    container.appendChild(div);
+  });
+}
 
 function renderCalendar(){
   document.getElementById('mainMonthTitle').innerText = monthNames[currentMonth-1] + ' ' + currentYear;
   document.getElementById('sidebarMonthTitle').innerText = monthNames[currentMonth-1] + ' ' + currentYear;
 
-  // Build day list (left), and weeks columns on right. We'll show 4-6 weeks depending on month.
   const first = new Date(currentYear, currentMonth-1, 1);
-  // start on Monday
   const startOffset = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
-  // compute total cells to show
   const totalCells = Math.ceil((startOffset + daysInMonth)/7) * 7;
   const weeks = totalCells / 7;
-
-  const dayList = document.getElementById('dayList');
-  dayList.innerHTML = '';
-  for(let i=0;i<7;i++){
-    const dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-    const d = document.createElement('div');
-    d.className='day-item';
-    d.innerText = dayNames[i];
-    dayList.appendChild(d);
-  }
 
   const weeksContainer = document.getElementById('weeksContainer');
   weeksContainer.innerHTML = '';
   let day = 1 - startOffset;
   for(let w=0; w<weeks; w++){
-    const col = document.createElement('div');
-    col.className='week-col';
+    const weekCol = document.createElement('div');
+    weekCol.className = 'week';
     for(let dow=0; dow<7; dow++){
       const dateNum = day;
-      const cell = document.createElement('div');
-      cell.className='week-day';
+      const dayBox = document.createElement('div');
+      dayBox.className = 'day';
       if(dateNum < 1 || dateNum > daysInMonth){
-        cell.style.opacity = '0.25';
+        dayBox.style.opacity = '0.18';
       } else {
         const dateStr = `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(dateNum).padStart(2,'0')}`;
         const dayEvents = eventsData.filter(e => e.event_date === dateStr);
-        const dateLabel = document.createElement('div');
-        dateLabel.style.position='absolute'; dateLabel.style.left='8px'; dateLabel.style.top='6px';
-        dateLabel.style.fontWeight='700'; dateLabel.style.color='var(--cyan)'; dateLabel.innerText = dateNum;
-        cell.appendChild(dateLabel);
+        const datePill = document.createElement('div');
+        datePill.className = 'date-pill';
+        datePill.innerText = dateNum;
+        dayBox.appendChild(datePill);
 
         const eventsContainer = document.createElement('div');
-        eventsContainer.style.marginTop='26px';
+        eventsContainer.style.marginTop='28px';
         eventsContainer.style.display='flex';
         eventsContainer.style.flexDirection='column';
         eventsContainer.style.gap='6px';
 
-        // show up to 3 events per day, others collapsed
         const maxShow = 3;
         for(let i=0;i<Math.min(dayEvents.length, maxShow); i++){
           const ev = dayEvents[i];
           const evDiv = document.createElement('div');
-          evDiv.className='event-card';
-          evDiv.innerText = ev.title.length>40?ev.title.slice(0,37)+'...':ev.title;
+          evDiv.className='event';
+          // show platform icon (first platform if exists)
+          let iconHTML = '';
+          if(ev.platforms && ev.platforms.length > 0){
+            const p0 = ev.platforms[0];
+            if(platformIcons[p0]){
+              const img = document.createElement('img');
+              img.className = 'plat-icon';
+              img.src = platformIcons[p0];
+              img.alt = p0;
+              evDiv.appendChild(img);
+            }
+          }
+          const titleSpan = document.createElement('div');
+          titleSpan.innerText = ev.title.length>40?ev.title.slice(0,37)+'...':ev.title;
+          evDiv.appendChild(titleSpan);
+
           evDiv.onclick = (e)=>{ e.stopPropagation(); openEventDetail(ev.id); };
           eventsContainer.appendChild(evDiv);
         }
         if(dayEvents.length > maxShow){
           const more = document.createElement('div');
-          more.className='event-card';
+          more.className='event';
           more.innerText = `+${dayEvents.length - maxShow} more`;
           more.onclick = (e)=>{ e.stopPropagation(); alert(dayEvents.map(a=>a.title).join('\n')); };
           eventsContainer.appendChild(more);
         }
-
-        cell.appendChild(eventsContainer);
+        dayBox.appendChild(eventsContainer);
       }
-      col.appendChild(cell);
+      weekCol.appendChild(dayBox);
       day++;
     }
-    weeksContainer.appendChild(col);
+    weeksContainer.appendChild(weekCol);
   }
 }
 
-function renderSidebarMini(){
-  // small grid showing all days (for quick glance)
+function renderMini(){
   const mini = document.getElementById('miniGrid');
   mini.innerHTML = '';
   const first = new Date(currentYear, currentMonth-1, 1);
   const startOffset = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
   for(let i=0;i<startOffset;i++){
-    const e = document.createElement('div'); e.style.opacity='0.2'; e.style.height='24px'; mini.appendChild(e);
+    const e = document.createElement('div'); e.style.opacity='0.2'; e.style.height='20px'; mini.appendChild(e);
   }
   for(let d=1; d<=daysInMonth; d++){
-    const cell = document.createElement('div'); cell.style.height='24px'; cell.style.textAlign='center'; cell.style.fontSize='12px';
+    const cell = document.createElement('div'); cell.style.height='20px'; cell.style.textAlign='center'; cell.style.fontSize='12px';
     cell.innerText = d; mini.appendChild(cell);
   }
 }
 
 function prevMonth(){ currentMonth--; if(currentMonth<1){ currentMonth=12; currentYear--; } loadEvents(); }
 function nextMonth(){ currentMonth++; if(currentMonth>12){ currentMonth=1; currentYear++; } loadEvents(); }
-
-function toggleView(){ /* placeholder: keep for future; currently UI is fixed to weeks layout */ alert('Month layout active.'); }
+function toggleView(){ alert('Month layout active.'); }
 
 function openEventModal(){ document.getElementById('eventModal').classList.add('active'); document.getElementById('eventForm').reset(); }
 function closeEventModal(){ document.getElementById('eventModal').classList.remove('active'); }
 
-/* Event details modal */
 function openEventDetail(id){
   const ev = eventsData.find(e=>e.id===id);
   if(!ev) return;
@@ -1077,7 +1102,11 @@ function openEventDetail(id){
   document.getElementById('detailDesc').innerText = ev.description || '';
   const tags = (ev.tags||[]).map(t=>`<span class="tag">${escapeHtml(t)}</span>`).join(' ');
   document.getElementById('detailTags').innerHTML = '<div class="small">Tags:</div>' + tags;
-  const plats = (ev.platforms||[]).map(p=>`<span class="platform">${escapeHtml(p)}</span>`).join(' ');
+  const plats = (ev.platforms||[]).map(p=>{
+    const url = platformIcons[p];
+    if(url) return `<img class="plat-icon" src="${url}" alt="${escapeHtml(p)}" style="margin-right:6px;"> ${escapeHtml(p)}`;
+    return `<span class="platform">${escapeHtml(p)}</span>`;
+  }).join('<br>');
   document.getElementById('detailPlatforms').innerHTML = '<div class="small">Platforms:</div>' + plats;
   document.getElementById('deleteFromDetailBtn').onclick = async ()=>{ if(confirm('Delete this event?')){ await deleteEvent(ev.id); closeEventDetail(); } };
   document.getElementById('eventDetailModal').classList.add('active');
@@ -1112,9 +1141,8 @@ document.getElementById('eventForm').addEventListener('submit', async (e)=>{
   }catch(err){ alert('Create failed'); }
 });
 
-/* profile picture handling - omitted cropper implementation for brevity; hooks kept */
+/* profile image minimal handlers */
 document.getElementById('profileFileInput').addEventListener('change', function(e){
-  // kept minimal: set file preview
   const f = e.target.files[0];
   if(!f) return;
   const reader = new FileReader();
@@ -1122,7 +1150,6 @@ document.getElementById('profileFileInput').addEventListener('change', function(
   reader.readAsDataURL(f);
 });
 document.getElementById('saveCropBtn').addEventListener('click', async ()=>{
-  // simple upload of the image currently shown in #cropImage as dataURL
   const img = document.getElementById('cropImage');
   if(!img.src) return alert('No image');
   try{
