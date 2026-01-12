@@ -374,9 +374,24 @@ class SharkCalendarApp:
     def setup_session(self):
         """Setup encrypted session storage"""
         logger.info("🔐 Configuring encrypted cookie storage...")
-        secret_key = base64.urlsafe_b64encode(
-            self.env_vars['SECRET_KEY'].encode().ljust(32)[:32]
-        )
+        
+        # Check if SECRET_KEY is already a valid Fernet key (base64 encoded)
+        secret_key_str = self.env_vars['SECRET_KEY']
+        
+        try:
+            # Try to use it directly as a Fernet key
+            secret_key = secret_key_str.encode()
+            # Validate it's a proper Fernet key by attempting to decode
+            base64.urlsafe_b64decode(secret_key)
+            if len(base64.urlsafe_b64decode(secret_key)) != 32:
+                raise ValueError("Key must be 32 bytes")
+        except Exception:
+            # If not a valid Fernet key, create one from the string
+            logger.info("   Converting SECRET_KEY to Fernet format...")
+            secret_key = base64.urlsafe_b64encode(
+                secret_key_str.encode().ljust(32)[:32]
+            )
+        
         setup(self.app, EncryptedCookieStorage(secret_key))
         logger.info("✅ Session storage configured")
     
@@ -1662,28 +1677,31 @@ class SharkCalendarApp:
 
 def main():
     """Main entry point"""
+    logger.info("="*70)
+    logger.info("🦈 SHARK CALENDAR - INITIALIZATION")
+    logger.info("="*70)
+    
+    # Load environment variables using def function
+    env_vars = load_environment()
+    
+    # Create application
+    app = SharkCalendarApp(env_vars)
+    
+    # Initialize database tables
+    logger.info("🔄 Initializing database...")
+    import asyncio
+    asyncio.run(app.db.initialize_tables())
+    
+    logger.info("✅ Initialization complete!")
+    logger.info("")
+    
+    # Run application
+    app.run()
+
+
+if __name__ == '__main__':
     try:
-        logger.info("="*70)
-        logger.info("🦈 SHARK CALENDAR - INITIALIZATION")
-        logger.info("="*70)
-        
-        # Load environment variables using def function
-        env_vars = load_environment()
-        
-        # Create application
-        app = SharkCalendarApp(env_vars)
-        
-        # Initialize database tables
-        logger.info("🔄 Initializing database...")
-        import asyncio
-        asyncio.run(app.db.initialize_tables())
-        
-        logger.info("✅ Initialization complete!")
-        logger.info("")
-        
-        # Run application
-        app.run()
-        
+        main()
     except ValueError as e:
         logger.error(f"❌ Configuration Error: {e}")
         logger.error("")
@@ -1692,14 +1710,32 @@ def main():
         logger.error("SUPABASE_KEY=your_supabase_key")
         logger.error("USER=your_username")
         logger.error("PASS=your_password")
-        logger.error("SECRET_KEY=your_secret_key_for_sessions")
+        logger.error("SECRET_KEY=your_secret_key_for_sessions (use a proper Fernet key)")
         logger.error("APP_HOST=0.0.0.0")
         logger.error("APP_PORT=8080")
+        logger.error("")
+        logger.error("💡 Generate a Fernet key with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'")
+        import sys
+        sys.exit(1)
+    except KeyboardInterrupt:
+        logger.info("")
+        logger.info("🛑 Shutdown requested by user")
+        logger.info("👋 Shark Calendar stopped gracefully")
+        import sys
+        sys.exit(0)
     except Exception as e:
         logger.error(f"❌ Fatal Error: {e}")
         import traceback
         traceback.print_exc()
-
-
-if __name__ == '__main__':
-    main()
+        import sys
+        sys.exit(1)
+else:
+    # When imported as a module (e.g., by a WSGI server)
+    logger.info("🦈 Shark Calendar imported as module")
+    try:
+        env_vars = load_environment()
+        application = SharkCalendarApp(env_vars).app  # For WSGI servers
+        logger.info("✅ WSGI application ready")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize WSGI application: {e}")
+        raise
