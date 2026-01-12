@@ -400,15 +400,19 @@ class SharkCalendarApp:
             # Try to use it directly as a Fernet key
             secret_key = secret_key_str.encode()
             # Validate it's a proper Fernet key by attempting to decode
-            base64.urlsafe_b64decode(secret_key)
-            if len(base64.urlsafe_b64decode(secret_key)) != 32:
-                raise ValueError("Key must be 32 bytes")
-        except Exception:
+            decoded = base64.urlsafe_b64decode(secret_key)
+            if len(decoded) != 32:
+                raise ValueError(f"Key must be 32 bytes, got {len(decoded)} bytes")
+            logger.info("   Using provided Fernet key")
+        except Exception as e:
             # If not a valid Fernet key, create one from the string
+            logger.info(f"   SECRET_KEY is not a valid Fernet key: {e}")
             logger.info("   Converting SECRET_KEY to Fernet format...")
             secret_key = base64.urlsafe_b64encode(
                 secret_key_str.encode().ljust(32)[:32]
             )
+            logger.info("   ⚠️  Warning: Using derived key. For production, generate a proper Fernet key:")
+            logger.info("   python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'")
         
         setup(self.app, EncryptedCookieStorage(secret_key))
         logger.info("✅ Session storage configured")
