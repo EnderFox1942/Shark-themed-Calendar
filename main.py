@@ -673,7 +673,7 @@ class SharkCalendarApp:
     
     def get_index_template(self) -> str:
         """Return HTML template for main page with cropping feature"""
-        return '''<!DOCTYPE html>
+        return r'''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
