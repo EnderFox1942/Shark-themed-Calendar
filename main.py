@@ -8,6 +8,7 @@ import os
 import json
 import base64
 import hashlib
+import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
 from dotenv import load_dotenv
@@ -19,9 +20,18 @@ from aiohttp_session.cookie_storage import EncryptedCookieStorage
 from cryptography import fernet
 from supabase import create_client, Client
 
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger('SharkCalendar')
+
 
 def load_environment() -> Dict[str, str]:
     """Load environment variables from .env file"""
+    logger.info("🔧 Loading environment variables...")
     load_dotenv()
     
     required_vars = ['SUPABASE_URL', 'SUPABASE_KEY', 'USER', 'PASS', 'SECRET_KEY']
@@ -30,12 +40,21 @@ def load_environment() -> Dict[str, str]:
     for var in required_vars:
         value = os.getenv(var)
         if not value:
+            logger.error(f"❌ Missing required environment variable: {var}")
             raise ValueError(f"Missing required environment variable: {var}")
         env_vars[var] = value
+        if var in ['PASS', 'SECRET_KEY', 'SUPABASE_KEY']:
+            logger.info(f"✅ {var} loaded (hidden for security)")
+        else:
+            logger.info(f"✅ {var} = {value}")
     
     # Port configuration for Render (uses PORT env var) or default to 8080
     env_vars['APP_PORT'] = os.getenv('PORT', os.getenv('APP_PORT', '8080'))
     env_vars['APP_HOST'] = os.getenv('APP_HOST', '0.0.0.0')
+    
+    logger.info(f"✅ APP_HOST = {env_vars['APP_HOST']}")
+    logger.info(f"✅ APP_PORT = {env_vars['APP_PORT']}")
+    logger.info("✅ All environment variables loaded successfully")
     
     return env_vars
 
@@ -44,10 +63,12 @@ class User:
     """User class for authentication"""
     
     def __init__(self, username: str, password: str):
+        logger.info(f"👤 Initializing user: {username}")
         self.username = username
         self.password_hash = self._hash_password(password)
         self.profile_picture = None
         self.display_name = username
+        logger.info(f"✅ User {username} initialized successfully")
     
     @staticmethod
     def _hash_password(password: str) -> str:
@@ -56,10 +77,13 @@ class User:
     
     def verify_password(self, password: str) -> bool:
         """Verify password against stored hash"""
-        return self._hash_password(password) == self.password_hash
+        is_valid = self._hash_password(password) == self.password_hash
+        logger.info(f"🔐 Password verification for {self.username}: {'✅ Success' if is_valid else '❌ Failed'}")
+        return is_valid
     
     def set_profile_picture(self, picture_data: str):
         """Set profile picture (base64 encoded)"""
+        logger.info(f"🖼️  Setting profile picture for {self.username}")
         self.profile_picture = picture_data
 
 
@@ -82,10 +106,92 @@ class SharkCalendarDB:
         self.events_table = "shark_events"
         self.users_table = "shark_users"
     
+    async def initialize_tables(self):
+        """Create tables if they don't exist"""
+        try:
+            # SQL to create tables
+            create_tables_sql = """
+            -- Create events table if not exists
+            CREATE TABLE IF NOT EXISTS shark_events (
+                id BIGSERIAL PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                event_date DATE NOT NULL,
+                event_time TIME,
+                shark_species TEXT DEFAULT 'Great White',
+                username TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+
+            -- Create users table if not exists
+            CREATE TABLE IF NOT EXISTS shark_users (
+                username TEXT PRIMARY KEY,
+                profile_picture TEXT,
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+
+            -- Enable Row Level Security if not already enabled
+            DO $ 
+            BEGIN
+                ALTER TABLE shark_events ENABLE ROW LEVEL SECURITY;
+            EXCEPTION
+                WHEN duplicate_object THEN NULL;
+            END $;
+
+            DO $ 
+            BEGIN
+                ALTER TABLE shark_users ENABLE ROW LEVEL SECURITY;
+            EXCEPTION
+                WHEN duplicate_object THEN NULL;
+            END $;
+
+            -- Create policies if they don't exist
+            DO $ 
+            BEGIN
+                CREATE POLICY "Enable all operations for authenticated users" 
+                ON shark_events FOR ALL 
+                USING (true);
+            EXCEPTION
+                WHEN duplicate_object THEN NULL;
+            END $;
+
+            DO $ 
+            BEGIN
+                CREATE POLICY "Enable all operations for authenticated users" 
+                ON shark_users FOR ALL 
+                USING (true);
+            EXCEPTION
+                WHEN duplicate_object THEN NULL;
+            END $;
+            """
+            
+            # Execute SQL using Supabase RPC or raw SQL
+            # Note: Supabase Python client doesn't directly support raw SQL execution
+            # We'll try to query the tables to check if they exist
+            try:
+                # Test if tables exist by querying them
+                self.client.table(self.events_table).select("id").limit(1).execute()
+                self.client.table(self.users_table).select("username").limit(1).execute()
+                print("✅ Database tables verified")
+            except Exception as table_error:
+                print("⚠️  Tables may not exist. Please create them manually in Supabase SQL Editor:")
+                print("\n" + "="*70)
+                print(create_tables_sql)
+                print("="*70 + "\n")
+                print("Or run this SQL in your Supabase SQL Editor dashboard.")
+                # Don't raise error, let app continue
+                
+        except Exception as e:
+            print(f"⚠️  Warning during table initialization: {e}")
+            print("The app will continue, but you may need to create tables manually.")
+    
     async def create_event(self, title: str, description: str, 
                           event_date: str, event_time: str,
                           shark_species: str, username: str) -> Dict:
         """Create a new calendar event"""
+        logger.info(f"📝 Creating event: '{title}' for user '{username}'")
+        logger.info(f"   Date: {event_date}, Time: {event_time}, Species: {shark_species}")
+        
         data = {
             "title": title,
             "description": description,
@@ -96,64 +202,151 @@ class SharkCalendarDB:
             "created_at": datetime.now().isoformat()
         }
         
-        result = self.client.table(self.events_table).insert(data).execute()
-        return result.data[0] if result.data else {}
+        try:
+            result = self.client.table(self.events_table).insert(data).execute()
+            if hasattr(result, 'data') and result.data:
+                logger.info(f"✅ Event created successfully with ID: {result.data[0].get('id')}")
+                return result.data[0]
+            elif isinstance(result, dict):
+                logger.info("✅ Event created successfully")
+                return result
+            logger.warning("⚠️  Event creation returned empty result")
+            return {}
+        except Exception as e:
+            logger.error(f"❌ Error creating event: {e}")
+            return {}
     
     async def get_events(self, username: str, start_date: Optional[str] = None, 
                         end_date: Optional[str] = None) -> List[Dict]:
         """Get events for a specific user"""
-        query = self.client.table(self.events_table).select("*").eq("username", username)
+        logger.info(f"📅 Fetching events for user: {username}")
+        if start_date or end_date:
+            logger.info(f"   Date range: {start_date or 'any'} to {end_date or 'any'}")
         
-        if start_date:
-            query = query.gte("event_date", start_date)
-        if end_date:
-            query = query.lte("event_date", end_date)
-        
-        result = query.order("event_date", desc=False).execute()
-        return result.data if result.data else []
+        try:
+            query = self.client.table(self.events_table).select("*").eq("username", username)
+            
+            if start_date:
+                query = query.gte("event_date", start_date)
+            if end_date:
+                query = query.lte("event_date", end_date)
+            
+            result = query.order("event_date", desc=False).execute()
+            if hasattr(result, 'data') and result.data:
+                logger.info(f"✅ Retrieved {len(result.data)} events")
+                return result.data
+            elif isinstance(result, list):
+                logger.info(f"✅ Retrieved {len(result)} events")
+                return result
+            logger.info("ℹ️  No events found")
+            return []
+        except Exception as e:
+            logger.error(f"❌ Error getting events: {e}")
+            return []
     
     async def update_event(self, event_id: int, username: str, updates: Dict) -> Dict:
         """Update an existing event (only if it belongs to the user)"""
-        result = self.client.table(self.events_table)\
-            .update(updates)\
-            .eq("id", event_id)\
-            .eq("username", username)\
-            .execute()
-        return result.data[0] if result.data else {}
+        logger.info(f"✏️  Updating event ID {event_id} for user '{username}'")
+        logger.info(f"   Updates: {updates}")
+        
+        try:
+            result = self.client.table(self.events_table)\
+                .update(updates)\
+                .eq("id", event_id)\
+                .eq("username", username)\
+                .execute()
+            if hasattr(result, 'data') and result.data:
+                logger.info(f"✅ Event {event_id} updated successfully")
+                return result.data[0]
+            elif isinstance(result, dict):
+                logger.info(f"✅ Event {event_id} updated successfully")
+                return result
+            logger.warning(f"⚠️  Event {event_id} not found or update failed")
+            return {}
+        except Exception as e:
+            logger.error(f"❌ Error updating event: {e}")
+            return {}
     
     async def delete_event(self, event_id: int, username: str) -> bool:
         """Delete an event (only if it belongs to the user)"""
-        result = self.client.table(self.events_table)\
-            .delete()\
-            .eq("id", event_id)\
-            .eq("username", username)\
-            .execute()
-        return bool(result.data)
+        logger.info(f"🗑️  Deleting event ID {event_id} for user '{username}'")
+        
+        try:
+            result = self.client.table(self.events_table)\
+                .delete()\
+                .eq("id", event_id)\
+                .eq("username", username)\
+                .execute()
+            if hasattr(result, 'data'):
+                success = bool(result.data)
+            else:
+                success = bool(result)
+            
+            if success:
+                logger.info(f"✅ Event {event_id} deleted successfully")
+            else:
+                logger.warning(f"⚠️  Event {event_id} not found or delete failed")
+            return success
+        except Exception as e:
+            logger.error(f"❌ Error deleting event: {e}")
+            return False
     
     async def save_profile_picture(self, username: str, picture_data: str) -> Dict:
         """Save or update user profile picture"""
+        logger.info(f"🖼️  Saving profile picture for user '{username}'")
+        logger.info(f"   Picture size: {len(picture_data)} bytes")
+        
         data = {
             "username": username,
             "profile_picture": picture_data,
             "updated_at": datetime.now().isoformat()
         }
         
-        # Try to update first, if not exists, insert
-        result = self.client.table(self.users_table)\
-            .upsert(data, on_conflict="username")\
-            .execute()
-        return result.data[0] if result.data else {}
+        try:
+            result = self.client.table(self.users_table)\
+                .upsert(data, on_conflict="username")\
+                .execute()
+            if hasattr(result, 'data') and result.data:
+                logger.info(f"✅ Profile picture saved successfully for '{username}'")
+                return result.data[0]
+            elif isinstance(result, dict):
+                logger.info(f"✅ Profile picture saved successfully for '{username}'")
+                return result
+            logger.warning("⚠️  Profile picture save returned empty result")
+            return {}
+        except Exception as e:
+            logger.error(f"❌ Error saving profile picture: {e}")
+            return {}
     
     async def get_profile_picture(self, username: str) -> Optional[str]:
         """Get user profile picture"""
-        result = self.client.table(self.users_table)\
-            .select("profile_picture")\
-            .eq("username", username)\
-            .execute()
+        logger.info(f"🖼️  Fetching profile picture for user '{username}'")
         
-        if result.data and len(result.data) > 0:
-            return result.data[0].get("profile_picture")
-        return None
+        try:
+            result = self.client.table(self.users_table)\
+                .select("profile_picture")\
+                .eq("username", username)\
+                .execute()
+            
+            if hasattr(result, 'data') and result.data and len(result.data) > 0:
+                picture = result.data[0].get("profile_picture")
+                if picture:
+                    logger.info(f"✅ Profile picture found for '{username}'")
+                else:
+                    logger.info(f"ℹ️  No profile picture set for '{username}'")
+                return picture
+            elif isinstance(result, list) and len(result) > 0:
+                picture = result[0].get("profile_picture")
+                if picture:
+                    logger.info(f"✅ Profile picture found for '{username}'")
+                else:
+                    logger.info(f"ℹ️  No profile picture set for '{username}'")
+                return picture
+            logger.info(f"ℹ️  No profile picture found for '{username}'")
+            return None
+        except Exception as e:
+            logger.error(f"❌ Error getting profile picture: {e}")
+            return None
 
 
 def require_auth(handler):
@@ -170,6 +363,7 @@ class SharkCalendarApp:
     """Main application class for shark calendar"""
     
     def __init__(self, env_vars: Dict[str, str]):
+        logger.info("🦈 Initializing Shark Calendar Application...")
         self.env_vars = env_vars
         self.user = User(env_vars['USER'], env_vars['PASS'])
         self.db = SharkCalendarDB(
@@ -177,16 +371,22 @@ class SharkCalendarApp:
             env_vars['SUPABASE_KEY']
         )
         self.app = web.Application()
+        logger.info("🔧 Setting up session management...")
         self.setup_session()
+        logger.info("🛣️  Setting up routes...")
         self.setup_routes()
+        logger.info("📄 Setting up templates...")
         self.setup_templates()
+        logger.info("✅ Shark Calendar Application initialized successfully")
     
     def setup_session(self):
         """Setup encrypted session storage"""
+        logger.info("🔐 Configuring encrypted cookie storage...")
         secret_key = base64.urlsafe_b64encode(
             self.env_vars['SECRET_KEY'].encode().ljust(32)[:32]
         )
         setup(self.app, EncryptedCookieStorage(secret_key))
+        logger.info("✅ Session storage configured")
     
     def setup_templates(self):
         """Setup Jinja2 templates"""
@@ -200,6 +400,23 @@ class SharkCalendarApp:
     
     def setup_routes(self):
         """Setup application routes"""
+        routes = [
+            ('GET', '/health', 'Health Check'),
+            ('GET', '/login', 'Login Page'),
+            ('POST', '/login', 'Login Submit'),
+            ('GET', '/logout', 'Logout'),
+            ('GET', '/', 'Main Calendar'),
+            ('GET', '/api/events', 'Get Events API'),
+            ('POST', '/api/events', 'Create Event API'),
+            ('PUT', '/api/events/{id}', 'Update Event API'),
+            ('DELETE', '/api/events/{id}', 'Delete Event API'),
+            ('POST', '/api/profile-picture', 'Upload Profile Picture API'),
+            ('GET', '/api/profile-picture', 'Get Profile Picture API'),
+        ]
+        
+        for method, path, description in routes:
+            logger.info(f"   {method:6} {path:30} → {description}")
+        
         self.app.router.add_get('/health', self.health_check)
         self.app.router.add_get('/login', self.login_page)
         self.app.router.add_post('/login', self.do_login)
@@ -211,35 +428,47 @@ class SharkCalendarApp:
         self.app.router.add_delete('/api/events/{id}', self.delete_event)
         self.app.router.add_post('/api/profile-picture', self.upload_profile_picture)
         self.app.router.add_get('/api/profile-picture', self.get_profile_picture)
+        
+        logger.info(f"✅ {len(routes)} routes configured")
     
     async def health_check(self, request: web.Request):
         """Public health check endpoint for uptime monitoring"""
-        return web.json_response({
+        logger.info("🏥 Health check requested")
+        response_data = {
             'status': 'ok',
             'service': 'Shark Calendar API',
             'timestamp': datetime.now().isoformat(),
             'uptime': 'online',
             'message': '🦈 Swimming smoothly!'
-        })
+        }
+        logger.info("✅ Health check: OK")
+        return web.json_response(response_data)
     
     @aiohttp_jinja2.template('login.html')
     async def login_page(self, request: web.Request):
         """Render login page"""
+        logger.info("📄 Login page requested")
         session = await get_session(request)
         if session.get('authenticated'):
+            logger.info("   User already authenticated, redirecting to main page")
             raise web.HTTPFound('/')
         return {'error': request.query.get('error', '')}
     
     async def do_login(self, request: web.Request):
         """Handle login form submission"""
+        logger.info("🔐 Login attempt...")
         data = await request.post()
         username = data.get('username', '')
         password = data.get('password', '')
+        
+        logger.info(f"   Username: {username}")
         
         if username == self.user.username and self.user.verify_password(password):
             session = await new_session(request)
             session['authenticated'] = True
             session['username'] = username
+            
+            logger.info(f"✅ Login successful for user '{username}'")
             
             # Load profile picture
             profile_pic = await self.db.get_profile_picture(username)
@@ -248,12 +477,16 @@ class SharkCalendarApp:
             
             raise web.HTTPFound('/')
         else:
+            logger.warning(f"❌ Login failed for username '{username}'")
             raise web.HTTPFound('/login?error=Invalid credentials')
     
     async def logout(self, request: web.Request):
         """Handle logout"""
         session = await get_session(request)
+        username = session.get('username', 'Unknown')
+        logger.info(f"🚪 User '{username}' logging out")
         session.clear()
+        logger.info("✅ Session cleared, redirecting to login")
         raise web.HTTPFound('/login')
     
     @require_auth
@@ -261,11 +494,14 @@ class SharkCalendarApp:
     async def index(self, request: web.Request):
         """Render main calendar page"""
         session = await get_session(request)
-        profile_pic = await self.db.get_profile_picture(session['username'])
+        username = session['username']
+        logger.info(f"📄 Main calendar page requested by '{username}'")
+        
+        profile_pic = await self.db.get_profile_picture(username)
         
         return {
             'title': 'Shark Calendar 🦈',
-            'username': session['username'],
+            'username': username,
             'profile_picture': profile_pic,
             'year': datetime.now().year,
             'month': datetime.now().strftime('%B')
@@ -275,79 +511,106 @@ class SharkCalendarApp:
     async def get_events(self, request: web.Request):
         """API endpoint to get events"""
         session = await get_session(request)
+        username = session['username']
         start_date = request.query.get('start_date')
         end_date = request.query.get('end_date')
         
-        events = await self.db.get_events(session['username'], start_date, end_date)
+        logger.info(f"🔍 API: Get events requested by '{username}'")
+        
+        events = await self.db.get_events(username, start_date, end_date)
         return web.json_response(events)
     
     @require_auth
     async def create_event(self, request: web.Request):
         """API endpoint to create event"""
+        session = await get_session(request)
+        username = session['username']
+        
         try:
-            session = await get_session(request)
             data = await request.json()
+            logger.info(f"➕ API: Create event requested by '{username}'")
+            
             event = await self.db.create_event(
                 title=data['title'],
                 description=data.get('description', ''),
                 event_date=data['event_date'],
                 event_time=data.get('event_time', '12:00'),
                 shark_species=data.get('shark_species', 'Great White'),
-                username=session['username']
+                username=username
             )
             return web.json_response(event, status=201)
         except Exception as e:
+            logger.error(f"❌ API: Error creating event: {e}")
             return web.json_response({'error': str(e)}, status=400)
     
     @require_auth
     async def update_event(self, request: web.Request):
         """API endpoint to update event"""
+        session = await get_session(request)
+        username = session['username']
+        
         try:
-            session = await get_session(request)
             event_id = int(request.match_info['id'])
             data = await request.json()
-            event = await self.db.update_event(event_id, session['username'], data)
+            logger.info(f"✏️  API: Update event {event_id} requested by '{username}'")
+            
+            event = await self.db.update_event(event_id, username, data)
             return web.json_response(event)
         except Exception as e:
+            logger.error(f"❌ API: Error updating event: {e}")
             return web.json_response({'error': str(e)}, status=400)
     
     @require_auth
     async def delete_event(self, request: web.Request):
         """API endpoint to delete event"""
+        session = await get_session(request)
+        username = session['username']
+        
         try:
-            session = await get_session(request)
             event_id = int(request.match_info['id'])
-            success = await self.db.delete_event(event_id, session['username'])
+            logger.info(f"🗑️  API: Delete event {event_id} requested by '{username}'")
+            
+            success = await self.db.delete_event(event_id, username)
             if success:
                 return web.json_response({'success': True})
             return web.json_response({'error': 'Event not found'}, status=404)
         except Exception as e:
+            logger.error(f"❌ API: Error deleting event: {e}")
             return web.json_response({'error': str(e)}, status=400)
     
     @require_auth
     async def upload_profile_picture(self, request: web.Request):
         """API endpoint to upload profile picture"""
+        session = await get_session(request)
+        username = session['username']
+        
         try:
-            session = await get_session(request)
             data = await request.json()
             picture_data = data.get('picture')
             
             if not picture_data:
+                logger.warning(f"⚠️  API: No picture data provided by '{username}'")
                 return web.json_response({'error': 'No picture data'}, status=400)
             
-            await self.db.save_profile_picture(session['username'], picture_data)
+            logger.info(f"📸 API: Upload profile picture requested by '{username}'")
+            await self.db.save_profile_picture(username, picture_data)
             return web.json_response({'success': True})
         except Exception as e:
+            logger.error(f"❌ API: Error uploading profile picture: {e}")
             return web.json_response({'error': str(e)}, status=400)
     
     @require_auth
     async def get_profile_picture(self, request: web.Request):
         """API endpoint to get profile picture"""
+        session = await get_session(request)
+        username = session['username']
+        
         try:
-            session = await get_session(request)
-            picture = await self.db.get_profile_picture(session['username'])
+            logger.info(f"🖼️  API: Get profile picture requested by '{username}'")
+            picture = await self.db.get_profile_picture(username)
             return web.json_response({'picture': picture})
         except Exception as e:
+            logger.error(f"❌ API: Error getting profile picture: {e}")
             return web.json_response({'error': str(e)}, status=400)
     
     def get_login_template(self) -> str:
@@ -1110,6 +1373,16 @@ class SharkCalendarApp:
     
     def run(self):
         """Run the application"""
+        logger.info("="*70)
+        logger.info("🦈 SHARK CALENDAR SERVER STARTING")
+        logger.info("="*70)
+        logger.info(f"🌐 Host: {self.env_vars['APP_HOST']}")
+        logger.info(f"🔌 Port: {self.env_vars['APP_PORT']}")
+        logger.info(f"🏥 Health Check: http://{self.env_vars['APP_HOST']}:{self.env_vars['APP_PORT']}/health")
+        logger.info(f"🔐 Login URL: http://{self.env_vars['APP_HOST']}:{self.env_vars['APP_PORT']}/login")
+        logger.info(f"👤 Username: {self.env_vars['USER']}")
+        logger.info("="*70)
+        
         web.run_app(
             self.app,
             host=self.env_vars['APP_HOST'],
@@ -1120,27 +1393,42 @@ class SharkCalendarApp:
 def main():
     """Main entry point"""
     try:
+        logger.info("="*70)
+        logger.info("🦈 SHARK CALENDAR - INITIALIZATION")
+        logger.info("="*70)
+        
         # Load environment variables using def function
         env_vars = load_environment()
         
-        # Create and run application
+        # Create application
         app = SharkCalendarApp(env_vars)
-        print(f"🦈 Shark Calendar starting on {env_vars['APP_HOST']}:{env_vars['APP_PORT']}")
-        print(f"👤 Login with username: {env_vars['USER']}")
+        
+        # Initialize database tables
+        logger.info("🔄 Initializing database...")
+        import asyncio
+        asyncio.run(app.db.initialize_tables())
+        
+        logger.info("✅ Initialization complete!")
+        logger.info("")
+        
+        # Run application
         app.run()
         
     except ValueError as e:
-        print(f"❌ Configuration Error: {e}")
-        print("\nPlease create a .env file with the following variables:")
-        print("SUPABASE_URL=your_supabase_url")
-        print("SUPABASE_KEY=your_supabase_key")
-        print("USER=your_username")
-        print("PASS=your_password")
-        print("SECRET_KEY=your_secret_key_for_sessions")
-        print("APP_HOST=0.0.0.0")
-        print("APP_PORT=8080")
+        logger.error(f"❌ Configuration Error: {e}")
+        logger.error("")
+        logger.error("Please create a .env file with the following variables:")
+        logger.error("SUPABASE_URL=your_supabase_url")
+        logger.error("SUPABASE_KEY=your_supabase_key")
+        logger.error("USER=your_username")
+        logger.error("PASS=your_password")
+        logger.error("SECRET_KEY=your_secret_key_for_sessions")
+        logger.error("APP_HOST=0.0.0.0")
+        logger.error("APP_PORT=8080")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        logger.error(f"❌ Fatal Error: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 if __name__ == '__main__':
