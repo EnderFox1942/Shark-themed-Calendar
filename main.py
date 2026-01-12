@@ -1,7 +1,7 @@
 """
 Shark-Themed Web Calendar System with Authentication
-Requires: aiohttp, python-dotenv, supabase, aiohttp-session, cryptography
-Install: pip install aiohttp python-dotenv supabase aiohttp-jinja2 jinja2 aiohttp-session cryptography
+Requires: aiohttp, supabase, aiohttp-session, cryptography
+Install: pip install aiohttp supabase aiohttp-jinja2 jinja2 aiohttp-session cryptography
 """
 
 import os
@@ -11,7 +11,6 @@ import hashlib
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
-from dotenv import load_dotenv
 from aiohttp import web
 import aiohttp_jinja2
 import jinja2
@@ -29,16 +28,35 @@ logging.basicConfig(
 logger = logging.getLogger('SharkCalendar')
 
 
+def load_env_file(filepath='.env'):
+    """Load environment variables from a .env file"""
+    if not os.path.exists(filepath):
+        logger.info(f"⚠️  Warning: {filepath} not found")
+        return
+    
+    logger.info(f"📄 Loading environment from {filepath}")
+    with open(filepath, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#'):
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    value = value.strip().strip('"').strip("'")
+                    os.environ[key.strip()] = value
+
+
 def load_environment() -> Dict[str, str]:
-    """Load environment variables from .env file"""
+    """Load environment variables from system environment or .env file"""
     logger.info("🔧 Loading environment variables...")
-    load_dotenv()
+    
+    # Try to load .env file if it exists (optional, for local development)
+    load_env_file('.env')
     
     required_vars = ['SUPABASE_URL', 'SUPABASE_KEY', 'USER', 'PASS', 'SECRET_KEY']
     env_vars = {}
     
     for var in required_vars:
-        value = os.getenv(var)
+        value = os.environ.get(var)
         if not value:
             logger.error(f"❌ Missing required environment variable: {var}")
             raise ValueError(f"Missing required environment variable: {var}")
@@ -49,8 +67,8 @@ def load_environment() -> Dict[str, str]:
             logger.info(f"✅ {var} = {value}")
     
     # Port configuration for Render (uses PORT env var) or default to 8080
-    env_vars['APP_PORT'] = os.getenv('PORT', os.getenv('APP_PORT', '8080'))
-    env_vars['APP_HOST'] = os.getenv('APP_HOST', '0.0.0.0')
+    env_vars['APP_PORT'] = os.environ.get('PORT', os.environ.get('APP_PORT', '8080'))
+    env_vars['APP_HOST'] = os.environ.get('APP_HOST', '0.0.0.0')
     
     logger.info(f"✅ APP_HOST = {env_vars['APP_HOST']}")
     logger.info(f"✅ APP_PORT = {env_vars['APP_PORT']}")
