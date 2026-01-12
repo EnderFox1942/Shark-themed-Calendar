@@ -94,15 +94,7 @@ class SharkCalendarDB:
         # Supabase client with built-in connection pooling
         # The Supabase client automatically handles connection pooling
         # and keeps connections alive for reuse
-        self.client: Client = create_client(
-            supabase_url, 
-            supabase_key,
-            options={
-                'schema': 'public',
-                'auto_refresh_token': True,
-                'persist_session': True
-            }
-        )
+        self.client: Client = create_client(supabase_url, supabase_key)
         self.events_table = "shark_events"
         self.users_table = "shark_users"
     
@@ -402,6 +394,7 @@ class SharkCalendarApp:
         """Setup application routes"""
         routes = [
             ('GET', '/health', 'Health Check'),
+            ('GET', '/favicon.ico', 'Favicon'),
             ('GET', '/login', 'Login Page'),
             ('POST', '/login', 'Login Submit'),
             ('GET', '/logout', 'Logout'),
@@ -418,6 +411,7 @@ class SharkCalendarApp:
             logger.info(f"   {method:6} {path:30} → {description}")
         
         self.app.router.add_get('/health', self.health_check)
+        self.app.router.add_get('/favicon.ico', self.serve_favicon)
         self.app.router.add_get('/login', self.login_page)
         self.app.router.add_post('/login', self.do_login)
         self.app.router.add_get('/logout', self.logout)
@@ -443,6 +437,19 @@ class SharkCalendarApp:
         }
         logger.info("✅ Health check: OK")
         return web.json_response(response_data)
+    
+    async def serve_favicon(self, request: web.Request):
+        """Serve shark emoji as favicon"""
+        logger.info("🦈 Favicon requested")
+        # SVG shark favicon (inline, no external file needed)
+        svg_favicon = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+            <text y="80" font-size="80">🦈</text>
+        </svg>'''
+        return web.Response(
+            body=svg_favicon,
+            content_type='image/svg+xml',
+            headers={'Cache-Control': 'public, max-age=604800'}
+        )
     
     @aiohttp_jinja2.template('login.html')
     async def login_page(self, request: web.Request):
@@ -622,12 +629,114 @@ class SharkCalendarApp:
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🦈 Shark Calendar - Login</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
+        }
+        
+        :root {
+            --ocean-deep: #001a33;
+            --ocean-mid: #003d5c;
+            --ocean-light: #0066a1;
+            --shark-grey: #808b96;
+            --foam-white: #e8f4f8;
+            --danger-red: #ff4757;
+            --neon-cyan: #00d9ff;
+        }
         
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Space Mono', monospace;
+            background: var(--ocean-deep);
+            min-height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        /* Animated background water effect */
+        .ocean-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, 
+                var(--ocean-deep) 0%, 
+                var(--ocean-mid) 50%, 
+                var(--ocean-light) 100%);
+            z-index: 0;
+        }
+        
+        .bubbles {
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            overflow: hidden;
+            top: 0;
+            left: 0;
+        }
+        
+        .bubble {
+            position: absolute;
+            bottom: -100px;
+            width: 40px;
+            height: 40px;
+            background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.3), rgba(255,255,255,0.05));
+            border-radius: 50%;
+            opacity: 0.5;
+            animation: rise 15s infinite ease-in;
+        }
+        
+        .bubble:nth-child(1) { left: 10%; width: 25px; height: 25px; animation-delay: 0s; animation-duration: 12s; }
+        .bubble:nth-child(2) { left: 25%; width: 35px; height: 35px; animation-delay: 2s; animation-duration: 14s; }
+        .bubble:nth-child(3) { left: 50%; width: 20px; height: 20px; animation-delay: 4s; animation-duration: 10s; }
+        .bubble:nth-child(4) { left: 75%; width: 30px; height: 30px; animation-delay: 1s; animation-duration: 13s; }
+        .bubble:nth-child(5) { left: 85%; width: 45px; height: 45px; animation-delay: 3s; animation-duration: 16s; }
+        .bubble:nth-child(6) { left: 40%; width: 28px; height: 28px; animation-delay: 5s; animation-duration: 11s; }
+        
+        @keyframes rise {
+            0% {
+                bottom: -100px;
+                transform: translateX(0);
+            }
+            50% {
+                transform: translateX(50px);
+            }
+            100% {
+                bottom: 110%;
+                transform: translateX(-50px);
+            }
+        }
+        
+        /* Swimming shark silhouette */
+        .shark-silhouette {
+            position: fixed;
+            font-size: 120px;
+            opacity: 0.1;
+            animation: swim 25s infinite linear;
+            z-index: 1;
+            filter: blur(2px);
+        }
+        
+        @keyframes swim {
+            0% {
+                left: -150px;
+                top: 20%;
+            }
+            100% {
+                left: 110%;
+                top: 60%;
+            }
+        }
+        
+        /* Main container */
+        .login-wrapper {
+            position: relative;
+            z-index: 10;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -636,83 +745,169 @@ class SharkCalendarApp:
         }
         
         .login-container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            padding: 50px;
+            background: rgba(0, 26, 51, 0.85);
+            backdrop-filter: blur(20px);
+            border: 2px solid rgba(0, 217, 255, 0.3);
+            border-radius: 8px;
+            padding: 50px 40px;
             max-width: 450px;
             width: 100%;
-            text-align: center;
+            box-shadow: 
+                0 0 60px rgba(0, 217, 255, 0.2),
+                inset 0 0 40px rgba(0, 102, 161, 0.1);
+            position: relative;
+        }
+        
+        /* Sonar ping effect */
+        .login-container::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100px;
+            height: 100px;
+            border: 2px solid var(--neon-cyan);
+            border-radius: 50%;
+            opacity: 0;
+            animation: sonar 3s infinite;
+        }
+        
+        @keyframes sonar {
+            0% {
+                width: 100px;
+                height: 100px;
+                opacity: 0.6;
+            }
+            100% {
+                width: 500px;
+                height: 500px;
+                opacity: 0;
+            }
         }
         
         .shark-logo {
-            font-size: 80px;
+            font-size: 100px;
+            text-align: center;
             margin-bottom: 20px;
-            animation: float 3s ease-in-out infinite;
+            animation: float 4s ease-in-out infinite;
+            filter: drop-shadow(0 0 20px rgba(0, 217, 255, 0.5));
         }
         
         @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
+            0%, 100% { 
+                transform: translateY(0px) rotate(-5deg); 
+            }
+            50% { 
+                transform: translateY(-15px) rotate(5deg); 
+            }
         }
         
         h1 {
-            color: #2a5298;
+            font-family: 'Bebas Neue', cursive;
+            color: var(--neon-cyan);
+            text-align: center;
+            font-size: 3.5em;
+            letter-spacing: 8px;
             margin-bottom: 10px;
-            font-size: 2.5em;
+            text-transform: uppercase;
+            text-shadow: 
+                0 0 10px rgba(0, 217, 255, 0.8),
+                0 0 20px rgba(0, 217, 255, 0.5),
+                0 0 30px rgba(0, 217, 255, 0.3);
         }
         
         .subtitle {
-            color: #666;
+            color: var(--foam-white);
+            text-align: center;
             margin-bottom: 40px;
-            font-size: 1.1em;
+            font-size: 0.9em;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            opacity: 0.7;
         }
         
         .form-group {
             margin-bottom: 25px;
-            text-align: left;
+            position: relative;
         }
         
         .form-group label {
             display: block;
             margin-bottom: 8px;
-            color: #333;
-            font-weight: 600;
-            font-size: 14px;
+            color: var(--foam-white);
+            font-weight: 700;
+            font-size: 11px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            opacity: 0.8;
         }
         
         .form-group input {
             width: 100%;
             padding: 15px;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
+            background: rgba(0, 61, 92, 0.4);
+            border: 2px solid rgba(0, 217, 255, 0.2);
+            border-radius: 4px;
             font-size: 16px;
+            font-family: 'Space Mono', monospace;
+            color: var(--foam-white);
             transition: all 0.3s;
+        }
+        
+        .form-group input::placeholder {
+            color: rgba(232, 244, 248, 0.3);
         }
         
         .form-group input:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            border-color: var(--neon-cyan);
+            background: rgba(0, 61, 92, 0.6);
+            box-shadow: 
+                0 0 20px rgba(0, 217, 255, 0.3),
+                inset 0 0 20px rgba(0, 217, 255, 0.1);
         }
         
         .btn-login {
             width: 100%;
-            padding: 15px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 18px;
-            font-weight: 600;
+            padding: 18px;
+            background: linear-gradient(135deg, var(--ocean-light) 0%, var(--ocean-mid) 100%);
+            color: var(--foam-white);
+            border: 2px solid var(--neon-cyan);
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Space Mono', monospace;
             cursor: pointer;
             transition: all 0.3s;
             margin-top: 10px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-login::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 217, 255, 0.4), transparent);
+            transition: left 0.5s;
+        }
+        
+        .btn-login:hover::before {
+            left: 100%;
         }
         
         .btn-login:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+            box-shadow: 
+                0 10px 30px rgba(0, 217, 255, 0.4),
+                0 0 40px rgba(0, 217, 255, 0.3);
+            border-color: var(--neon-cyan);
         }
         
         .btn-login:active {
@@ -720,67 +915,141 @@ class SharkCalendarApp:
         }
         
         .error {
-            background: #fee;
-            color: #c33;
+            background: rgba(255, 71, 87, 0.2);
+            color: var(--danger-red);
             padding: 15px;
-            border-radius: 10px;
+            border-radius: 4px;
             margin-bottom: 20px;
-            border: 2px solid #fcc;
+            border: 2px solid var(--danger-red);
             display: none;
+            font-size: 14px;
+            text-align: center;
+            animation: shake 0.5s;
         }
         
         .error.show {
             display: block;
         }
         
-        .waves {
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+        
+        .depth-indicator {
             position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 100px;
-            pointer-events: none;
-            opacity: 0.3;
+            right: 30px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: rgba(232, 244, 248, 0.3);
+            font-size: 12px;
+            letter-spacing: 2px;
+            writing-mode: vertical-rl;
+            z-index: 5;
+            text-transform: uppercase;
+        }
+        
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 2.5em;
+                letter-spacing: 4px;
+            }
+            
+            .login-container {
+                padding: 40px 30px;
+            }
+            
+            .depth-indicator {
+                display: none;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="login-container">
-        <div class="shark-logo">🦈</div>
-        <h1>Shark Calendar</h1>
-        <p class="subtitle">Dive into your schedule</p>
-        
-        {% if error %}
-        <div class="error show">❌ {{ error }}</div>
-        {% endif %}
-        
-        <form method="POST" action="/login">
-            <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username" required autofocus>
-            </div>
-            
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" required>
-            </div>
-            
-            <button type="submit" class="btn-login">
-                🔐 Login to Calendar
-            </button>
-        </form>
+    <div class="ocean-bg"></div>
+    
+    <div class="bubbles">
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
     </div>
     
-    <svg class="waves" xmlns="http://www.w3.org/2000/svg" viewBox="0 24 150 28" preserveAspectRatio="none">
-        <defs>
-            <path id="wave" d="M-160 44c30 0 58-18 88-18s 58 18 88 18 58-18 88-18 58 18 88 18 v44h-352z" />
-        </defs>
-        <g>
-            <use href="#wave" x="50" y="0" fill="rgba(255,255,255,0.3)" />
-            <use href="#wave" x="50" y="3" fill="rgba(255,255,255,0.5)" />
-            <use href="#wave" x="50" y="6" fill="rgba(255,255,255,0.7)" />
-        </g>
-    </svg>
+    <div class="shark-silhouette">🦈</div>
+    
+    <div class="depth-indicator">DEPTH: 200M - ACCESS PORTAL</div>
+    
+    <div class="login-wrapper">
+        <div class="login-container">
+            <div class="shark-logo">🦈</div>
+            <h1>APEX</h1>
+            <p class="subtitle">Calendar System</p>
+            
+            {% if error %}
+            <div class="error show">⚠ {{ error }}</div>
+            {% endif %}
+            
+            <form method="POST" action="/login">
+                <div class="form-group">
+                    <label for="username">Operator ID</label>
+                    <input type="text" id="username" name="username" placeholder="Enter credentials" required autofocus>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Access Code</label>
+                    <input type="password" id="password" name="password" placeholder="••••••••" required>
+                </div>
+                
+                <button type="submit" class="btn-login">
+                    ▶ Dive In
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        // Add particle effect on mouse move
+        document.addEventListener('mousemove', (e) => {
+            if (Math.random() > 0.95) {
+                const particle = document.createElement('div');
+                particle.style.position = 'fixed';
+                particle.style.left = e.clientX + 'px';
+                particle.style.top = e.clientY + 'px';
+                particle.style.width = '3px';
+                particle.style.height = '3px';
+                particle.style.background = 'rgba(0, 217, 255, 0.6)';
+                particle.style.borderRadius = '50%';
+                particle.style.pointerEvents = 'none';
+                particle.style.zIndex = '100';
+                particle.style.boxShadow = '0 0 10px rgba(0, 217, 255, 0.8)';
+                document.body.appendChild(particle);
+                
+                setTimeout(() => {
+                    particle.style.transition = 'all 1s ease-out';
+                    particle.style.transform = 'translateY(-50px)';
+                    particle.style.opacity = '0';
+                }, 10);
+                
+                setTimeout(() => {
+                    document.body.removeChild(particle);
+                }, 1000);
+            }
+        });
+        
+        // Typing sound effect simulation
+        const inputs = document.querySelectorAll('input');
+        inputs.forEach(input => {
+            input.addEventListener('keydown', () => {
+                input.style.boxShadow = '0 0 25px rgba(0, 217, 255, 0.4)';
+                setTimeout(() => {
+                    input.style.boxShadow = '0 0 20px rgba(0, 217, 255, 0.3)';
+                }, 100);
+            });
+        });
+    </script>
 </body>
 </html>
         '''
@@ -794,6 +1063,7 @@ class SharkCalendarApp:
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }}</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
