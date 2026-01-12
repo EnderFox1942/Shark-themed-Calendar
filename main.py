@@ -1553,7 +1553,8 @@ class SharkCalendarApp:
                 font-size: 2em;
             }
             
-            .calendar-grid {
+            .list-view {
                 grid-template-columns: 1fr;
             }
         }
+    </style>
