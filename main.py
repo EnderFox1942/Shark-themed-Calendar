@@ -394,6 +394,16 @@ class SharkCalendarApp:
         logger.info("🔐 Configuring session storage...")
         setup(self.app, SimpleCookieStorage())
         logger.info("✅ Session storage configured")
+    def setup_templates(self):
+        """Setup Jinja2 templates"""
+        aiohttp_jinja2.setup(
+            self.app,
+            loader=jinja2.DictLoader({
+                'login.html': self.get_login_template(),
+                'index.html': self.get_index_template(),
+            })
+        )
+    
     
     def setup_routes(self):
         """Setup application routes"""
