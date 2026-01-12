@@ -15,7 +15,7 @@ from aiohttp import web
 import aiohttp_jinja2
 import jinja2
 from aiohttp_session import setup, get_session, new_session
-from aiohttp_session.cookie_storage import EncryptedCookieStorage
+from aiohttp_session import setup, get_session, new_session, SimpleCookieStorage
 from cryptography import fernet
 from supabase import create_client, Client
 
