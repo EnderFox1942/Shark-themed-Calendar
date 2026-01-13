@@ -1084,9 +1084,16 @@ async function init() {
 
 async function fetchEvents() {
   try {
+    console.log('Fetching events from /api/events...');
     const r = await fetch('/api/events');
-    if (!r.ok) return [];
-    return await r.json();
+    console.log('Response status:', r.status);
+    if (!r.ok) {
+      console.error('Response not OK:', r.status);
+      return [];
+    }
+    const data = await r.json();
+    console.log('Events loaded:', data.length);
+    return data;
   } catch (e) {
     console.error('Error fetching events:', e);
     return [];
@@ -1094,12 +1101,19 @@ async function fetchEvents() {
 }
 
 async function loadEvents() {
-  eventsData = await fetchEvents();
-  renderCalendar();
-  renderMini();
+  console.log('loadEvents called');
+  try {
+    eventsData = await fetchEvents();
+    console.log('Events data:', eventsData);
+    renderCalendar();
+    renderMini();
+  } catch (e) {
+    console.error('Error in loadEvents:', e);
+  }
 }
 
 function renderCalendar() {
+  console.log('renderCalendar called');
   document.getElementById('mainMonthTitle').innerText = monthNames[currentMonth-1] + ' ' + currentYear;
   document.getElementById('sidebarMonthTitle').innerText = monthNames[currentMonth-1];
   
@@ -1110,7 +1124,13 @@ function renderCalendar() {
   const startOffset = (first.getDay() + 6) % 7; // Monday = 0
   const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
   
+  console.log('Days in month:', daysInMonth, 'Start offset:', startOffset);
+  
   const grid = document.getElementById('calendarGrid');
+  if (!grid) {
+    console.error('calendarGrid element not found!');
+    return;
+  }
   grid.innerHTML = '';
   
   // Add empty cells for offset
@@ -1189,10 +1209,16 @@ function renderCalendar() {
     
     grid.appendChild(dayCell);
   }
+  console.log('Calendar rendered successfully with', daysInMonth, 'days');
 }
 
 function renderMini() {
+  console.log('renderMini called');
   const mini = document.getElementById('miniGrid');
+  if (!mini) {
+    console.error('miniGrid element not found!');
+    return;
+  }
   mini.innerHTML = '';
   
   const today = new Date();
@@ -1223,6 +1249,7 @@ function renderMini() {
     
     mini.appendChild(cell);
   }
+  console.log('Mini calendar rendered successfully');
 }
 
 function showEventDetails(ev) {
@@ -1423,7 +1450,12 @@ document.getElementById('eventForm').addEventListener('submit', async (e) => {
 });
 
 // Initialize on load
-init();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+console.log('Script loaded, init scheduled');
 </script>
 </body>
 </html>'''
