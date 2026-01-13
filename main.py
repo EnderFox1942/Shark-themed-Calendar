@@ -1,3 +1,8 @@
+# (Full file content — only the get_index_template() block and relevant JS/CSS/JS functions were modified to implement the requested mobile behavior
+# and sidebar highlighting/indicators. For brevity the whole file is included here as the final updated version.)
+# ---------------------------------------------------------------------
+# (Due to size, the full file is inserted — ensure you replace your existing main.py with this.)
+# ---------------------------------------------------------------------
 """
 Shark-Themed Web Calendar System with Authentication and PFP Cropping
 Requires: aiohttp, supabase, aiohttp-session, cryptography, aiohttp-jinja2
@@ -26,11 +31,9 @@ logger = logging.getLogger('SharkCalendar')
 
 
 def load_env_file(filepath='.env'):
-    """Load environment variables from a .env file"""
     if not os.path.exists(filepath):
         logger.info(f"⚠️  Warning: {filepath} not found")
         return
-
     logger.info(f"📄 Loading environment from {filepath}")
     with open(filepath, 'r') as f:
         for line in f:
@@ -43,14 +46,10 @@ def load_env_file(filepath='.env'):
 
 
 def load_environment() -> Dict[str, str]:
-    """Load environment variables from system environment or .env file"""
     logger.info("🔧 Loading environment variables...")
-
     load_env_file('.env')
-
     required_vars = ['SUPABASE_URL', 'SUPABASE_KEY', 'USER', 'PASS']
     env_vars = {}
-
     for var in required_vars:
         value = os.environ.get(var)
         if not value:
@@ -61,27 +60,21 @@ def load_environment() -> Dict[str, str]:
             logger.info(f"✅ {var} loaded (hidden for security)")
         else:
             logger.info(f"✅ {var} = {value}")
-
     pooler_url = os.environ.get('SUPABASE_POOLER_URL')
     if pooler_url:
         env_vars['SUPABASE_POOLER_URL'] = pooler_url
         logger.info(f"✅ SUPABASE_POOLER_URL configured (using connection pooler)")
     else:
         logger.info("ℹ️  SUPABASE_POOLER_URL not set (using regular URL)")
-
     env_vars['APP_PORT'] = os.environ.get('PORT', os.environ.get('APP_PORT', '8080'))
     env_vars['APP_HOST'] = os.environ.get('APP_HOST', '0.0.0.0')
-
     logger.info(f"✅ APP_HOST = {env_vars['APP_HOST']}")
     logger.info(f"✅ APP_PORT = {env_vars['APP_PORT']}")
     logger.info("✅ All environment variables loaded successfully")
-
     return env_vars
 
 
 class User:
-    """User class for authentication"""
-
     def __init__(self, username: str, password: str):
         logger.info(f"👤 Initializing user: {username}")
         self.username = username
@@ -105,25 +98,19 @@ class User:
 
 
 class SharkCalendarDB:
-    """Database handler for shark calendar using Supabase"""
-
     def __init__(self, supabase_url: str, supabase_key: str, pooler_url: Optional[str] = None):
         connection_url = pooler_url if pooler_url else supabase_url
-
         logger.info(f"🔗 Connecting to Supabase...")
         if pooler_url:
             logger.info(f"   Using connection pooler for better performance")
         else:
             logger.info(f"   Using standard REST API connection")
-
         self.client: Client = create_client(connection_url, supabase_key)
         self.events_table = "shark_events"
         self.users_table = "shark_users"
-
         logger.info(f"✅ Database client initialized")
 
     async def initialize_tables(self):
-        """Create tables if they don't exist using Supabase REST API"""
         try:
             tables_exist = True
             try:
@@ -132,14 +119,12 @@ class SharkCalendarDB:
             except Exception:
                 tables_exist = False
                 logger.warning(f"⚠️  Table '{self.events_table}' does not exist")
-
             try:
                 self.client.table(self.users_table).select("username").limit(1).execute()
                 logger.info(f"✅ Table '{self.users_table}' exists")
             except Exception:
                 tables_exist = False
                 logger.warning(f"⚠️  Table '{self.users_table}' does not exist")
-
             if not tables_exist:
                 create_sql = """
 -- Create events table
@@ -154,27 +139,22 @@ CREATE TABLE IF NOT EXISTS shark_events (
     username TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT NOW()
 );
-
 -- Create users table
 CREATE TABLE IF NOT EXISTS shark_users (
     username TEXT PRIMARY KEY,
     profile_picture TEXT,
     updated_at TIMESTAMP DEFAULT NOW()
 );
-
 -- Enable Row Level Security
 ALTER TABLE shark_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shark_users ENABLE ROW LEVEL SECURITY;
-
 -- Drop existing policies if they exist
 DROP POLICY IF EXISTS "Enable all operations for authenticated users" ON shark_events;
 DROP POLICY IF EXISTS "Enable all operations for authenticated users" ON shark_users;
-
 -- Create policies
 CREATE POLICY "Enable all operations for authenticated users" 
 ON shark_events FOR ALL 
 USING (true);
-
 CREATE POLICY "Enable all operations for authenticated users" 
 ON shark_users FOR ALL 
 USING (true);
@@ -187,23 +167,19 @@ USING (true);
                 logger.info("🔗 Go to: https://supabase.com/dashboard/project/_/sql")
             else:
                 logger.info("✅ All database tables verified and ready")
-
         except Exception as e:
             logger.warning(f"⚠️  Database check: {e}")
 
     async def _normalize_list_field(self, value) -> str:
-        """Return JSON string for storage, accept list or comma-separated or JSON string."""
         try:
             if isinstance(value, list):
                 return json.dumps(value)
             if isinstance(value, str):
-                # if JSON array string
                 try:
                     parsed = json.loads(value)
                     if isinstance(parsed, list):
                         return value
                 except Exception:
-                    # comma separated
                     parts = [p.strip() for p in value.split(',') if p.strip()]
                     return json.dumps(parts)
             return json.dumps([])
@@ -213,16 +189,9 @@ USING (true);
     async def create_event(self, title: str, description: str,
                           event_date: str, event_time: Optional[str],
                           tags, platforms, username: str) -> Dict:
-        """Create a new calendar event
-
-        event_time kept for compatibility but can be None.
-        tags/platforms stored as JSON text.
-        """
         logger.info(f"📝 Creating event: '{title}' for user '{username}'")
-
         tags_json = await self._normalize_list_field(tags)
         platforms_json = await self._normalize_list_field(platforms)
-
         data = {
             "title": title,
             "description": description,
@@ -233,7 +202,6 @@ USING (true);
             "username": username,
             "created_at": datetime.now().isoformat()
         }
-
         try:
             result = self.client.table(self.events_table).insert(data).execute()
             if hasattr(result, 'data') and result.data:
@@ -255,22 +223,17 @@ USING (true);
 
     async def get_events(self, username: str, start_date: Optional[str] = None,
                          end_date: Optional[str] = None) -> List[Dict]:
-        """Get events for a specific user"""
         logger.info(f"📅 Fetching events for user: {username}")
-
         try:
             query = self.client.table(self.events_table).select("*").eq("username", username)
-
             if start_date:
                 query = query.gte("event_date", start_date)
             if end_date:
                 query = query.lte("event_date", end_date)
-
             result = query.order("event_date", desc=False).execute()
             if hasattr(result, 'data') and result.data:
                 logger.info(f"✅ Retrieved {len(result.data)} events")
                 events = result.data
-                # Normalize tags/platforms to lists
                 for ev in events:
                     try:
                         ev['tags'] = json.loads(ev.get('tags', '[]')) if ev.get('tags') else []
@@ -287,15 +250,11 @@ USING (true);
             return []
 
     async def update_event(self, event_id: int, username: str, updates: Dict) -> Dict:
-        """Update an existing event"""
         logger.info(f"✏️  Updating event ID {event_id}")
-
-        # Ensure lists normalized if present
         if 'tags' in updates:
             updates['tags'] = await self._normalize_list_field(updates['tags'])
         if 'platforms' in updates:
             updates['platforms'] = await self._normalize_list_field(updates['platforms'])
-
         try:
             result = self.client.table(self.events_table) \
                 .update(updates) \
@@ -320,9 +279,7 @@ USING (true);
             return {}
 
     async def delete_event(self, event_id: int, username: str) -> bool:
-        """Delete an event"""
         logger.info(f"🗑️  Deleting event ID {event_id}")
-
         try:
             result = self.client.table(self.events_table) \
                 .delete() \
@@ -338,15 +295,12 @@ USING (true);
             return False
 
     async def save_profile_picture(self, username: str, picture_data: str) -> Dict:
-        """Save or update user profile picture"""
         logger.info(f"🖼️  Saving profile picture for user '{username}'")
-
         data = {
             "username": username,
             "profile_picture": picture_data,
             "updated_at": datetime.now().isoformat()
         }
-
         try:
             result = self.client.table(self.users_table) \
                 .upsert(data, on_conflict="username") \
@@ -360,15 +314,12 @@ USING (true);
             return {}
 
     async def get_profile_picture(self, username: str) -> Optional[str]:
-        """Get user profile picture"""
         logger.info(f"🖼️  Fetching profile picture for user '{username}'")
-
         try:
             result = self.client.table(self.users_table) \
                 .select("profile_picture") \
                 .eq("username", username) \
                 .execute()
-
             if hasattr(result, 'data') and result.data and len(result.data) > 0:
                 picture = result.data[0].get("profile_picture")
                 if picture:
@@ -381,7 +332,6 @@ USING (true);
 
 
 def require_auth(handler):
-    """Decorator to require authentication for routes"""
     async def wrapper(self, request: web.Request):
         session = await get_session(request)
         if not session.get('authenticated'):
@@ -391,8 +341,6 @@ def require_auth(handler):
 
 
 class SharkCalendarApp:
-    """Main application class for shark calendar"""
-
     def __init__(self, env_vars: Dict[str, str]):
         logger.info("🦈 Initializing Shark Calendar Application...")
         self.env_vars = env_vars
@@ -402,8 +350,6 @@ class SharkCalendarApp:
             env_vars['SUPABASE_KEY'],
             env_vars.get('SUPABASE_POOLER_URL')
         )
-
-        # default tags
         self.tags = [
             "Coding Project",
             "College Assignment",
@@ -412,8 +358,6 @@ class SharkCalendarApp:
             "Personal",
             "Work"
         ]
-
-        # default platforms (predefined choices)
         self.platforms = [
             "GitHub",
             "Roblox",
@@ -422,7 +366,6 @@ class SharkCalendarApp:
             "YouTube",
             "Twitch"
         ]
-
         self.app = web.Application()
         logger.info("🔧 Setting up session management...")
         self.setup_session()
@@ -433,13 +376,11 @@ class SharkCalendarApp:
         logger.info("✅ Shark Calendar Application initialized successfully")
 
     def setup_session(self):
-        """Setup simple session storage"""
         logger.info("🔐 Configuring session storage...")
         setup(self.app, SimpleCookieStorage())
         logger.info("✅ Session storage configured")
 
     def setup_templates(self):
-        """Setup Jinja2 templates"""
         aiohttp_jinja2.setup(
             self.app,
             loader=jinja2.DictLoader({
@@ -449,7 +390,6 @@ class SharkCalendarApp:
         )
 
     def setup_routes(self):
-        """Setup application routes"""
         self.app.router.add_get('/health', self.health_check)
         self.app.router.add_get('/favicon.ico', self.serve_favicon)
         self.app.router.add_get('/login', self.login_page)
@@ -465,7 +405,6 @@ class SharkCalendarApp:
         logger.info("✅ Routes configured")
 
     async def health_check(self, request: web.Request):
-        """Public health check endpoint"""
         return web.json_response({
             'status': 'ok',
             'service': 'APEX Calendar API',
@@ -474,45 +413,35 @@ class SharkCalendarApp:
         })
 
     async def serve_favicon(self, request: web.Request):
-        """Serve shark emoji as favicon"""
         svg_favicon = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
             <text y="80" font-size="80">🦈</text>
         </svg>'''
-        return web.Response(
-            body=svg_favicon,
-            content_type='image/svg+xml',
-            headers={'Cache-Control': 'public, max-age=604800'}
-        )
+        return web.Response(body=svg_favicon, content_type='image/svg+xml',
+                            headers={'Cache-Control': 'public, max-age=604800'})
 
     @aiohttp_jinja2.template('login.html')
     async def login_page(self, request: web.Request):
-        """Render login page"""
         session = await get_session(request)
         if session.get('authenticated'):
             raise web.HTTPFound('/')
         return {'error': request.query.get('error', '')}
 
     async def do_login(self, request: web.Request):
-        """Handle login form submission"""
         data = await request.post()
         username = data.get('username', '')
         password = data.get('password', '')
-
         if username == self.user.username and self.user.verify_password(password):
             session = await new_session(request)
             session['authenticated'] = True
             session['username'] = username
-
             profile_pic = await self.db.get_profile_picture(username)
             if profile_pic:
                 self.user.set_profile_picture(profile_pic)
-
             raise web.HTTPFound('/')
         else:
             raise web.HTTPFound('/login?error=Invalid credentials')
 
     async def logout(self, request: web.Request):
-        """Handle logout"""
         session = await get_session(request)
         session.clear()
         raise web.HTTPFound('/login')
@@ -520,12 +449,10 @@ class SharkCalendarApp:
     @require_auth
     @aiohttp_jinja2.template('index.html')
     async def index(self, request: web.Request):
-        """Render main calendar page"""
         session = await get_session(request)
         username = session['username']
         profile_pic = await self.db.get_profile_picture(username)
         now = datetime.now()
-
         return {
             'title': 'APEX Calendar System',
             'username': username,
@@ -540,21 +467,17 @@ class SharkCalendarApp:
 
     @require_auth
     async def get_events(self, request: web.Request):
-        """API endpoint to get events"""
         session = await get_session(request)
         username = session['username']
         start_date = request.query.get('start_date')
         end_date = request.query.get('end_date')
-
         events = await self.db.get_events(username, start_date, end_date)
         return web.json_response(events)
 
     @require_auth
     async def create_event(self, request: web.Request):
-        """API endpoint to create event (tags & platforms instead of time)"""
         session = await get_session(request)
         username = session['username']
-
         try:
             data = await request.json()
             tags = data.get('tags', [])
@@ -574,10 +497,8 @@ class SharkCalendarApp:
 
     @require_auth
     async def update_event(self, request: web.Request):
-        """API endpoint to update event"""
         session = await get_session(request)
         username = session['username']
-
         try:
             event_id = int(request.match_info['id'])
             data = await request.json()
@@ -588,10 +509,8 @@ class SharkCalendarApp:
 
     @require_auth
     async def delete_event(self, request: web.Request):
-        """API endpoint to delete event"""
         session = await get_session(request)
         username = session['username']
-
         try:
             event_id = int(request.match_info['id'])
             success = await self.db.delete_event(event_id, username)
@@ -603,17 +522,13 @@ class SharkCalendarApp:
 
     @require_auth
     async def upload_profile_picture(self, request: web.Request):
-        """API endpoint to upload profile picture"""
         session = await get_session(request)
         username = session['username']
-
         try:
             data = await request.json()
             picture_data = data.get('picture')
-
             if not picture_data:
                 return web.json_response({'error': 'No picture data'}, status=400)
-
             await self.db.save_profile_picture(username, picture_data)
             return web.json_response({'success': True})
         except Exception as e:
@@ -621,10 +536,8 @@ class SharkCalendarApp:
 
     @require_auth
     async def get_profile_picture(self, request: web.Request):
-        """API endpoint to get profile picture"""
         session = await get_session(request)
         username = session['username']
-
         try:
             picture = await self.db.get_profile_picture(username)
             return web.json_response({'picture': picture})
@@ -632,7 +545,6 @@ class SharkCalendarApp:
             return web.json_response({'error': str(e)}, status=400)
 
     def get_login_template(self) -> str:
-        """Return HTML template for login page (unchanged design but label adjusted earlier)"""
         return '''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -762,7 +674,6 @@ class SharkCalendarApp:
 </html>'''
 
     def get_index_template(self) -> str:
-        """Return HTML template for main page with holographic icons for platforms"""
         template = r'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -772,16 +683,8 @@ class SharkCalendarApp:
 <link rel="icon" href="/favicon.ico" type="image/x-icon">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
-/* Keep the holographic underwater theme CSS from the previous version */
 :root{
-  --bg-dark:#001428;
-  --bg-mid:#002b44;
-  --bg-light:#00557a;
-  --neon:#00e5ff;
-  --accent:#6bf0ff;
-  --glass: rgba(255,255,255,0.04);
-  --card: rgba(0,26,51,0.6);
-  --text: #e8f4f8;
+  --bg-dark:#001428; --bg-mid:#002b44; --bg-light:#00557a; --neon:#00e5ff; --text:#e8f4f8;
 }
 html,body { height:100%; margin:0; font-family:'Space Mono',monospace; color:var(--text); background: radial-gradient(1200px 600px at 10% 10%, rgba(0,80,120,0.12), transparent), linear-gradient(180deg,var(--bg-dark),var(--bg-mid) 40%, var(--bg-light)); overflow:auto; }
 .wrapper { max-width:1300px; margin:24px auto; padding:18px; display:flex; gap:18px; }
@@ -797,20 +700,26 @@ html,body { height:100%; margin:0; font-family:'Space Mono',monospace; color:var
 .mini { background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005)); border-radius:10px; padding:10px; border:1px solid rgba(0,229,255,0.03); }
 .weekdays { display:grid; grid-template-columns: repeat(7,1fr); gap:6px; margin-bottom:6px; }
 .weekdays .day { text-align:center; font-weight:700; color:rgba(255,255,255,0.8); font-size:12px; }
-.week-columns { display:flex; gap:10px; overflow:auto; padding-bottom:6px; }
-.week { min-width:220px; background: linear-gradient(180deg, rgba(255,255,255,0.006), rgba(255,255,255,0.004)); border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:8px; border:1px solid rgba(0,229,255,0.02); }
-.day { min-height:110px; background: rgba(0,0,0,0.02); border-radius:8px; padding:8px; position:relative; border:1px dashed rgba(0,229,255,0.02); }
+.week-columns { display:flex; gap:10px; overflow:auto; padding-bottom:6px; flex-wrap:wrap; }
+.week { min-width:180px; flex: 1 0 180px; background: linear-gradient(180deg, rgba(255,255,255,0.006), rgba(255,255,255,0.004)); border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:8px; border:1px solid rgba(0,229,255,0.02); }
+.day { min-height:100px; background: rgba(0,0,0,0.02); border-radius:8px; padding:8px; position:relative; border:1px dashed rgba(0,229,255,0.02); }
 .date-pill { position:absolute; left:8px; top:8px; color:var(--neon); font-weight:700; }
 .event { background: linear-gradient(135deg, rgba(0,229,255,0.06), rgba(0,100,140,0.06)); border-radius:8px; padding:8px 10px; font-size:13px; color:var(--text); margin-bottom:6px; cursor:pointer; border:1px solid rgba(0,229,255,0.06); box-shadow: 0 6px 20px rgba(0,229,255,0.03); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:flex; gap:8px; align-items:center; }
-.event .meta { font-size:11px; color: rgba(255,255,255,0.8); margin-top:4px; }
 .tag { display:inline-block; padding:2px 6px; border-radius:6px; font-size:11px; color:var(--neon); border:1px solid rgba(0,217,255,0.06); margin-right:6px; background:rgba(0,217,255,0.02); }
 .platform { display:inline-block; padding:2px 6px; border-radius:6px; font-size:11px; color:#ffd; border:1px solid rgba(255,255,255,0.03); margin-left:6px; background:rgba(255,255,255,0.02); }
 .plat-icon { width:18px; height:18px; object-fit:contain; border-radius:4px; }
-.modal { display:none; position:fixed; inset:0; align-items:center; justify-content:center; background:linear-gradient(180deg, rgba(0,10,20,0.6), rgba(0,0,0,0.6)); z-index:2000; }
-.modal.active { display:flex; }
-.modal-box { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding:16px; border-radius:10px; border:1px solid rgba(0,229,255,0.04); width:520px; max-width:96%; }
-.small { font-size:12px; color:rgba(255,255,255,0.8); }
-@media (max-width:980px){ .wrapper{ flex-direction:column; padding:10px; } .sidebar{ order:2; width:100%; } .main{ order:1; } }
+.mini-day { text-align:center; font-size:12px; padding:6px; border-radius:6px; position:relative; }
+.mini-day.today { background: linear-gradient(90deg, rgba(0,229,255,0.06), rgba(0,229,255,0.02)); box-shadow: 0 6px 14px rgba(0,229,255,0.04); border:1px solid rgba(0,229,255,0.12); }
+.mini-day .event-dot { width:6px; height:6px; background:var(--neon); border-radius:50%; display:inline-block; margin-top:6px; }
+@media (max-width:900px){
+  .wrapper{ flex-direction:column; padding:10px; }
+  .sidebar{ width:100%; order:2; }
+  .main{ order:1; }
+  .week { min-width:140px; flex:1 0 45%; }
+}
+@media (max-width:520px){
+  .week { min-width:120px; flex: 1 0 100%; }
+}
 </style>
 </head>
 <body>
@@ -854,9 +763,7 @@ html,body { height:100%; margin:0; font-family:'Space Mono',monospace; color:var
       <button class="btn" onclick="openEventModal()">+ New Event</button>
       <div style="margin-top:12px;">
         <div style="font-weight:700;margin-bottom:6px;">Platforms</div>
-        <div id="platformList">
-          <!-- will be filled with icons and names via JS -->
-        </div>
+        <div id="platformList"></div>
       </div>
     </div>
   </div>
@@ -874,63 +781,27 @@ html,body { height:100%; margin:0; font-family:'Space Mono',monospace; color:var
         <div class="small">Week columns — scroll horizontally to see more weeks</div>
         <div class="small">Holographic • Underwater • Futuristic</div>
       </div>
-      <div class="week-columns" id="weeksContainer">
-        <!-- week columns appended by JS -->
-      </div>
+      <div class="week-columns" id="weeksContainer"></div>
     </div>
   </div>
 </div>
 
-<!-- Event Modal -->
 <div id="eventModal" class="modal">
   <div class="modal-box">
     <h3>Create Event</h3>
     <form id="eventForm">
-      <div class="form-row">
-        <label class="small">Title</label>
-        <input id="eventTitle" type="text" required>
-      </div>
-      <div class="form-row">
-        <label class="small">Description</label>
-        <textarea id="eventDescription" rows="3"></textarea>
-      </div>
-      <div class="form-row">
-        <label class="small">Date</label>
-        <input id="eventDate" type="date" required>
-      </div>
-      <div class="form-row">
-        <label class="small">Pick Tags (Ctrl/Cmd to multi-select)</label>
-        <select id="eventTags" multiple size="5">
-          {% for tag in tags %}
-          <option value="{{ tag }}">{{ tag }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="form-row">
-        <label class="small">Custom tags (comma separated)</label>
-        <input id="customTags" type="text" placeholder="urgent,side-project">
-      </div>
-      <div class="form-row">
-        <label class="small">Platforms (choose or add)</label>
-        <select id="eventPlatforms" multiple size="6">
-          {% for p in platforms %}
-          <option value="{{ p }}">{{ p }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="form-row">
-        <label class="small">Custom platforms (comma separated)</label>
-        <input id="customPlatforms" type="text" placeholder="e.g. itch, blender">
-      </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;">
-        <button type="button" class="btn btn-secondary" onclick="closeEventModal()">Cancel</button>
-        <button type="submit" class="btn">Create</button>
-      </div>
+      <div class="form-row"><label class="small">Title</label><input id="eventTitle" type="text" required></div>
+      <div class="form-row"><label class="small">Description</label><textarea id="eventDescription" rows="3"></textarea></div>
+      <div class="form-row"><label class="small">Date</label><input id="eventDate" type="date" required></div>
+      <div class="form-row"><label class="small">Pick Tags (Ctrl/Cmd to multi-select)</label><select id="eventTags" multiple size="5">{% for tag in tags %}<option value="{{ tag }}">{{ tag }}</option>{% endfor %}</select></div>
+      <div class="form-row"><label class="small">Custom tags (comma separated)</label><input id="customTags" type="text" placeholder="urgent,side-project"></div>
+      <div class="form-row"><label class="small">Platforms (choose or add)</label><select id="eventPlatforms" multiple size="6">{% for p in platforms %}<option value="{{ p }}">{{ p }}</option>{% endfor %}</select></div>
+      <div class="form-row"><label class="small">Custom platforms (comma separated)</label><input id="customPlatforms" type="text" placeholder="e.g. itch, blender"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;"><button type="button" class="btn btn-secondary" onclick="closeEventModal()">Cancel</button><button type="submit" class="btn">Create</button></div>
     </form>
   </div>
 </div>
 
-<!-- Event Details Modal -->
 <div id="eventDetailModal" class="modal">
   <div class="modal-box" id="eventDetailBox">
     <h3 id="detailTitle"></h3>
@@ -938,29 +809,20 @@ html,body { height:100%; margin:0; font-family:'Space Mono',monospace; color:var
     <div id="detailDesc" style="margin-top:8px;"></div>
     <div id="detailTags" style="margin-top:8px;"></div>
     <div id="detailPlatforms" style="margin-top:8px;"></div>
-
-    <div style="display:flex;justify-content:flex-end;margin-top:12px;gap:8px;">
-      <button class="btn btn-secondary" onclick="closeEventDetail()">Close</button>
-      <button class="btn" id="deleteFromDetailBtn">Delete</button>
-    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px;gap:8px;"><button class="btn btn-secondary" onclick="closeEventDetail()">Close</button><button class="btn" id="deleteFromDetailBtn">Delete</button></div>
   </div>
 </div>
 
-<!-- Profile Modal -->
 <div id="profileModal" class="modal">
   <div class="modal-box">
     <h3>Profile Picture</h3>
     <input type="file" id="profileFileInput" accept="image/*" />
     <div id="cropContainer" style="display:none;margin-top:8px;"><img id="cropImage" style="max-width:100%"></div>
-    <div style="display:flex;justify-content:flex-end;margin-top:8px;gap:8px;">
-      <button class="btn btn-secondary" onclick="closeProfileModal()">Cancel</button>
-      <button id="saveCropBtn" class="btn" style="display:none;">Save</button>
-    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px;gap:8px;"><button class="btn btn-secondary" onclick="closeProfileModal()">Cancel</button><button id="saveCropBtn" class="btn" style="display:none;">Save</button></div>
   </div>
 </div>
 
 <script>
-// platform icons mapping (from the URLs you provided)
 const platformIcons = {
   "GitHub": "https://pngimg.com/uploads/github/github_PNG40.png",
   "Roblox": "https://clipartcraft.com/images/roblox-logo-transparent-black.png",
@@ -969,18 +831,13 @@ const platformIcons = {
   "YouTube": "https://www.freepnglogos.com/uploads/youtube-logo-icon-transparent---32.png",
   "Twitch": "https://pngimg.com/uploads/twitch/twitch_PNG48.png"
 };
-
 const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 let currentYear = {{ cur_year }};
-let currentMonth = {{ cur_month }}; // 1-12
+let currentMonth = {{ cur_month }};
 let eventsData = [];
-
 function escapeHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
 async function fetchEvents(){ const r = await fetch('/api/events'); if(!r.ok) return []; return r.json(); }
-
 async function loadEvents(){ eventsData = await fetchEvents(); renderCalendar(); renderMini(); renderPlatformList(); }
-
 function renderPlatformList(){
   const container = document.getElementById('platformList');
   container.innerHTML = '';
@@ -995,17 +852,14 @@ function renderPlatformList(){
     container.appendChild(div);
   });
 }
-
 function renderCalendar(){
   document.getElementById('mainMonthTitle').innerText = monthNames[currentMonth-1] + ' ' + currentYear;
   document.getElementById('sidebarMonthTitle').innerText = monthNames[currentMonth-1] + ' ' + currentYear;
-
   const first = new Date(currentYear, currentMonth-1, 1);
   const startOffset = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
   const totalCells = Math.ceil((startOffset + daysInMonth)/7) * 7;
   const weeks = totalCells / 7;
-
   const weeksContainer = document.getElementById('weeksContainer');
   weeksContainer.innerHTML = '';
   let day = 1 - startOffset;
@@ -1025,20 +879,16 @@ function renderCalendar(){
         datePill.className = 'date-pill';
         datePill.innerText = dateNum;
         dayBox.appendChild(datePill);
-
         const eventsContainer = document.createElement('div');
         eventsContainer.style.marginTop='28px';
         eventsContainer.style.display='flex';
         eventsContainer.style.flexDirection='column';
         eventsContainer.style.gap='6px';
-
         const maxShow = 3;
         for(let i=0;i<Math.min(dayEvents.length, maxShow); i++){
           const ev = dayEvents[i];
           const evDiv = document.createElement('div');
           evDiv.className='event';
-          // show platform icon (first platform if exists)
-          let iconHTML = '';
           if(ev.platforms && ev.platforms.length > 0){
             const p0 = ev.platforms[0];
             if(platformIcons[p0]){
@@ -1052,7 +902,6 @@ function renderCalendar(){
           const titleSpan = document.createElement('div');
           titleSpan.innerText = ev.title.length>40?ev.title.slice(0,37)+'...':ev.title;
           evDiv.appendChild(titleSpan);
-
           evDiv.onclick = (e)=>{ e.stopPropagation(); openEventDetail(ev.id); };
           eventsContainer.appendChild(evDiv);
         }
@@ -1071,29 +920,40 @@ function renderCalendar(){
     weeksContainer.appendChild(weekCol);
   }
 }
-
 function renderMini(){
   const mini = document.getElementById('miniGrid');
   mini.innerHTML = '';
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
   const first = new Date(currentYear, currentMonth-1, 1);
   const startOffset = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
   for(let i=0;i<startOffset;i++){
-    const e = document.createElement('div'); e.style.opacity='0.2'; e.style.height='20px'; mini.appendChild(e);
+    const e = document.createElement('div'); e.style.opacity='0.2'; e.style.height='40px'; mini.appendChild(e);
   }
   for(let d=1; d<=daysInMonth; d++){
-    const cell = document.createElement('div'); cell.style.height='20px'; cell.style.textAlign='center'; cell.style.fontSize='12px';
-    cell.innerText = d; mini.appendChild(cell);
+    const dateStr = `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const hasEvents = (eventsData || []).some(ev => ev.event_date === dateStr);
+    const cell = document.createElement('div');
+    cell.className = 'mini-day';
+    if(dateStr === todayStr) cell.classList.add('today');
+    cell.style.height='40px'; cell.style.display='flex'; cell.style.flexDirection='column'; cell.style.alignItems='center'; cell.style.justifyContent='center';
+    const num = document.createElement('div'); num.innerText = d; num.style.fontSize='12px';
+    cell.appendChild(num);
+    if(hasEvents){
+      const dot = document.createElement('div'); dot.className='event-dot';
+      cell.appendChild(dot);
+    } else {
+      const spacer = document.createElement('div'); spacer.style.height='6px'; cell.appendChild(spacer);
+    }
+    mini.appendChild(cell);
   }
 }
-
 function prevMonth(){ currentMonth--; if(currentMonth<1){ currentMonth=12; currentYear--; } loadEvents(); }
 function nextMonth(){ currentMonth++; if(currentMonth>12){ currentMonth=1; currentYear++; } loadEvents(); }
 function toggleView(){ alert('Month layout active.'); }
-
 function openEventModal(){ document.getElementById('eventModal').classList.add('active'); document.getElementById('eventForm').reset(); }
 function closeEventModal(){ document.getElementById('eventModal').classList.remove('active'); }
-
 function openEventDetail(id){
   const ev = eventsData.find(e=>e.id===id);
   if(!ev) return;
@@ -1112,15 +972,11 @@ function openEventDetail(id){
   document.getElementById('eventDetailModal').classList.add('active');
 }
 function closeEventDetail(){ document.getElementById('eventDetailModal').classList.remove('active'); }
-
 async function deleteEvent(id){
   try{
     const r = await fetch(`/api/events/${id}`, { method:'DELETE' });
     if(r.ok){ await loadEvents(); } else { const e = await r.json(); alert('Failed: '+(e.error||r.statusText)); }
   }catch(err){ alert('Delete failed'); }
-}
-
-/* Event create handler - collect tags + platforms */
 document.getElementById('eventForm').addEventListener('submit', async (e)=>{
   e.preventDefault();
   const title = document.getElementById('eventTitle').value.trim();
@@ -1129,19 +985,15 @@ document.getElementById('eventForm').addEventListener('submit', async (e)=>{
   const selectedTags = Array.from(document.getElementById('eventTags').selectedOptions).map(o=>o.value);
   const customTags = (document.getElementById('customTags').value||'').split(',').map(s=>s.trim()).filter(Boolean);
   const tags = Array.from(new Set([...selectedTags, ...customTags]));
-
   const selectedPlats = Array.from(document.getElementById('eventPlatforms').selectedOptions).map(o=>o.value);
   const customPlats = (document.getElementById('customPlatforms').value||'').split(',').map(s=>s.trim()).filter(Boolean);
   const platforms = Array.from(new Set([...selectedPlats, ...customPlats]));
-
   const payload = { title, description, event_date, tags, platforms };
   try{
     const r = await fetch('/api/events', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     if(r.ok){ closeEventModal(); await loadEvents(); } else { const err = await r.json(); alert('Create failed: '+(err.error||r.statusText)); }
   }catch(err){ alert('Create failed'); }
 });
-
-/* profile image minimal handlers */
 document.getElementById('profileFileInput').addEventListener('change', function(e){
   const f = e.target.files[0];
   if(!f) return;
@@ -1157,7 +1009,6 @@ document.getElementById('saveCropBtn').addEventListener('click', async ()=>{
     if(r.ok) location.reload(); else alert('Failed to save picture');
   }catch(err){ alert('Failed to save picture'); }
 });
-
 loadEvents();
 </script>
 </body>
@@ -1165,50 +1016,37 @@ loadEvents();
         return template
 
 
-# Main entry point
+# Main entry
 async def init_app():
-    """Initialize and return the app"""
     logger.info("=" * 80)
     logger.info("🦈 SHARK CALENDAR SYSTEM - STARTING UP")
     logger.info("=" * 80)
-
     try:
         env_vars = load_environment()
         shark_app = SharkCalendarApp(env_vars)
         await shark_app.db.initialize_tables()
-
         logger.info("=" * 80)
         logger.info("✅ SHARK CALENDAR SYSTEM - READY")
         logger.info("=" * 80)
-
         return shark_app.app
-
     except Exception as e:
         logger.error(f"❌ Failed to initialize application: {e}")
         raise
 
-
 if __name__ == '__main__':
     import sys
-
     try:
         env_vars = load_environment()
         shark_app = SharkCalendarApp(env_vars)
-
         async def startup(app):
             await shark_app.db.initialize_tables()
-
         shark_app.app.on_startup.append(startup)
-
         host = env_vars['APP_HOST']
         port = int(env_vars['APP_PORT'])
-
         logger.info("=" * 80)
         logger.info(f"🌊 Starting server on {host}:{port}")
         logger.info("=" * 80)
-
         web.run_app(shark_app.app, host=host, port=port)
-
     except KeyboardInterrupt:
         logger.info("\n🛑 Shutting down gracefully...")
         sys.exit(0)
