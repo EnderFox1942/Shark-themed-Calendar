@@ -23,8 +23,8 @@ A next-generation underwater research station interface for temporal event manag
 | DESIGNATION | OPERATIONAL STATUS | ACCESS TERMINAL |
 |-------------|-------------------|-----------------|
 | 🦈 **APEX PROTOCOL** | `[TEMPORAL MANAGEMENT SYSTEM]` | *[CURRENT_LOCATION]* |
-| 🛡️ **GUARDIAN SENTINEL** | `[SERVER DEFENSE MATRIX]` | [DEPLOY](https://github.com/SorynTech/Discord-Moderation-Bot-) |
-| 🎮 **RECON NEXUS** | `[REAL-TIME INTELLIGENCE FEED]` | [DEPLOY](https://github.com/SorynTech/Blox-Fruits-Notifier) |
+| 🛡️ **Moderation Shark** | `[SERVER DEFENSE MATRIX]` | [DEPLOY](https://github.com/SorynTech/Discord-Moderation-Bot-) |
+| 🎮 **Blox Fruits Notifier** | `[REAL-TIME INTELLIGENCE FEED]` | [DEPLOY](https://github.com/SorynTech/Blox-Fruits-Notifier) |
 
 ```
 > ALL SYSTEMS FEATURE DEEP-OCEAN HOLOGRAPHIC UI
@@ -325,7 +325,7 @@ This system operates under MIT License - see LICENSE file for operational parame
 
 ## 🙏 ACKNOWLEDGMENTS
 
-- Part of the **SORYN TECH DEFENSE GRID**
+- Part of the **SORYN TECH Application Suite**
 - Inspired by deep-ocean exploration and advanced tactical interfaces
 - Engineered with precision and 10,000+ shark emojis 🦈
 - Cropper.js neural-scanning technology
