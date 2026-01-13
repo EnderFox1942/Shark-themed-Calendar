@@ -669,7 +669,7 @@ class SharkCalendarApp:
 </html>'''
 
     def get_index_template(self) -> str:
-        """Mobile-responsive calendar with platform logos, holographic dropdowns, and event indicators"""
+        """Mobile-responsive calendar with platform logos, holographic dropdowns, event indicators, profile pic upload, and custom event details modal"""
         return r'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -753,7 +753,7 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
 .cal-day { 
   min-height:90px; background:rgba(0,26,51,0.6); border-radius:8px; 
   padding:8px 6px; position:relative; border:1px solid rgba(0,229,255,0.08);
-  transition:all 0.2s;
+  transition:all 0.2s; cursor:pointer;
 }
 @media (max-width:600px){ 
   .cal-day { min-height:70px; padding:6px 4px; }
@@ -814,6 +814,15 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
 }
 .btn:hover { background:rgba(0,229,255,0.3); box-shadow: 0 0 15px rgba(0,229,255,0.4); }
 .btn-small { padding:6px 10px; font-size:11px; }
+.btn-danger {
+  background:rgba(255,71,87,0.15);
+  border-color:#ff4757;
+  color:#ff4757;
+}
+.btn-danger:hover {
+  background:rgba(255,71,87,0.3);
+  box-shadow: 0 0 15px rgba(255,71,87,0.4);
+}
 
 /* Month Title */
 .month-title { 
@@ -946,6 +955,67 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
   letter-spacing:1px; text-transform:uppercase;
 }
 
+/* Event Details Modal */
+.event-detail-row {
+  margin-bottom:16px;
+  padding-bottom:16px;
+  border-bottom:1px solid rgba(0,229,255,0.1);
+}
+.event-detail-row:last-of-type {
+  border-bottom:none;
+}
+.event-detail-label {
+  color:var(--neon);
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  margin-bottom:8px;
+}
+.event-detail-value {
+  color:var(--text);
+  font-size:14px;
+  line-height:1.6;
+}
+.event-detail-tags, .event-detail-platforms {
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:8px;
+}
+.tag-badge, .platform-badge {
+  background:rgba(0,229,255,0.15);
+  border:1px solid rgba(0,229,255,0.3);
+  padding:6px 12px;
+  border-radius:6px;
+  font-size:12px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+
+/* Profile Picture Upload */
+#cropperContainer {
+  max-width:400px;
+  margin:20px auto;
+  position:relative;
+}
+#cropperCanvas {
+  max-width:100%;
+  border:2px solid rgba(0,229,255,0.3);
+  border-radius:8px;
+  cursor:crosshair;
+}
+.crop-preview {
+  margin-top:20px;
+  text-align:center;
+}
+.crop-preview canvas {
+  border:2px solid var(--neon);
+  border-radius:50%;
+  box-shadow: 0 0 20px rgba(0,229,255,0.4);
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width:8px; }
 ::-webkit-scrollbar-track { background:rgba(0,26,51,0.5); }
@@ -965,7 +1035,16 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
     </div>
   </div>
   <div class="user-actions">
-    <div style="font-weight:700;color:var(--neon)">{{ username }}</div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div id="profilePicContainer" style="width:40px;height:40px;border-radius:50%;overflow:hidden;border:2px solid var(--neon);background:rgba(0,61,92,0.4);cursor:pointer;" onclick="openProfilePicModal()">
+        {% if profile_picture %}
+        <img id="profilePicDisplay" src="{{ profile_picture }}" style="width:100%;height:100%;object-fit:cover;">
+        {% else %}
+        <div id="profilePicDisplay" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:20px;">👤</div>
+        {% endif %}
+      </div>
+      <div style="font-weight:700;color:var(--neon)">{{ username }}</div>
+    </div>
     <a href="/logout" class="btn btn-small">Logout</a>
   </div>
 </div>
@@ -1052,8 +1131,56 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
   </div>
 </div>
 
+<!-- Event Details Modal -->
+<div class="modal" id="eventDetailsModal">
+  <div class="modal-content">
+    <div class="modal-header" id="detailsEventTitle">Event Details</div>
+    <div class="event-detail-row">
+      <div class="event-detail-label">Description</div>
+      <div class="event-detail-value" id="detailsEventDescription">-</div>
+    </div>
+    <div class="event-detail-row">
+      <div class="event-detail-label">Date</div>
+      <div class="event-detail-value" id="detailsEventDate">-</div>
+    </div>
+    <div class="event-detail-row" id="detailsTagsRow" style="display:none;">
+      <div class="event-detail-label">Tags</div>
+      <div class="event-detail-tags" id="detailsEventTags"></div>
+    </div>
+    <div class="event-detail-row" id="detailsPlatformsRow" style="display:none;">
+      <div class="event-detail-label">Platforms</div>
+      <div class="event-detail-platforms" id="detailsEventPlatforms"></div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn" onclick="closeEventDetailsModal()">Close</button>
+      <button type="button" class="btn btn-danger" onclick="deleteCurrentEvent()">Delete Event</button>
+    </div>
+  </div>
+</div>
+
+<!-- Profile Picture Upload Modal -->
+<div class="modal" id="profilePicModal">
+  <div class="modal-content">
+    <div class="modal-header">Upload Profile Picture</div>
+    <div class="form-group">
+      <label class="form-label">Choose Image</label>
+      <input type="file" class="form-input" id="profilePicInput" accept="image/*" onchange="loadImageForCrop(event)">
+    </div>
+    <div id="cropperContainer" style="display:none;">
+      <canvas id="cropperCanvas"></canvas>
+      <div class="crop-preview">
+        <div class="event-detail-label">Preview</div>
+        <canvas id="previewCanvas" width="150" height="150"></canvas>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn" onclick="closeProfilePicModal()">Cancel</button>
+      <button type="button" class="btn" id="uploadPicBtn" onclick="uploadProfilePic()" style="display:none;">Upload</button>
+    </div>
+  </div>
+</div>
+
 <script>
-// Platform logo URLs
 // Platform logo URLs
 const platformLogos = {
   'GitHub': 'https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/github.svg',
@@ -1072,6 +1199,17 @@ const tags = {{ tags|tojson }};
 const platforms = {{ platforms|tojson }};
 let selectedTags = [];
 let selectedPlatforms = [];
+let currentEventDetails = null;
+
+// Image cropping variables
+let cropImage = null;
+let cropCanvas = null;
+let cropCtx = null;
+let cropStartX = 0;
+let cropStartY = 0;
+let cropEndX = 0;
+let cropEndY = 0;
+let isCropping = false;
 
 // Mobile detection
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 900;
@@ -1082,7 +1220,6 @@ async function init() {
   console.log('=== INIT STARTED ===');
   console.log('Current month:', currentMonth, 'Current year:', currentYear);
   
-  // Check critical elements exist
   const calGrid = document.getElementById('calendarGrid');
   const miniGrid = document.getElementById('miniGrid');
   console.log('calendarGrid exists:', !!calGrid);
@@ -1146,7 +1283,6 @@ async function loadEvents() {
     console.error('ERROR in loadEvents:', e);
     console.error('Error stack:', e.stack);
     
-    // Still try to render empty calendar
     eventsData = [];
     renderCalendar();
     renderMini();
@@ -1174,7 +1310,7 @@ function renderCalendar() {
   console.log('Today:', todayStr);
   
   const first = new Date(currentYear, currentMonth-1, 1);
-  const startOffset = (first.getDay() + 6) % 7; // Monday = 0
+  const startOffset = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
   
   console.log('Days in month:', daysInMonth, 'Start offset:', startOffset);
@@ -1189,8 +1325,6 @@ function renderCalendar() {
   console.log('Clearing calendar grid...');
   grid.innerHTML = '';
   
-  // Add empty cells for offset
-  console.log('Adding', startOffset, 'empty cells...');
   for (let i = 0; i < startOffset; i++) {
     const emptyCell = document.createElement('div');
     emptyCell.className = 'cal-day';
@@ -1199,7 +1333,6 @@ function renderCalendar() {
     grid.appendChild(emptyCell);
   }
   
-  // Add days
   console.log('Adding', daysInMonth, 'day cells...');
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
@@ -1207,6 +1340,7 @@ function renderCalendar() {
     
     const dayCell = document.createElement('div');
     dayCell.className = 'cal-day';
+    dayCell.dataset.date = dateStr;
     
     if (dateStr === todayStr) {
       dayCell.classList.add('today-highlight');
@@ -1216,6 +1350,13 @@ function renderCalendar() {
       dayCell.classList.add('has-events-day');
       console.log('Day', d, 'has', dayEvents.length, 'events');
     }
+    
+    // Click to add event
+    dayCell.onclick = function(e) {
+      if (e.target === dayCell || e.target.classList.contains('date-num')) {
+        openEventModalForDate(dateStr);
+      }
+    };
     
     const dateNum = document.createElement('div');
     dateNum.className = 'date-num';
@@ -1230,7 +1371,6 @@ function renderCalendar() {
       const eventItem = document.createElement('div');
       eventItem.className = 'event-item';
       
-      // Add platform icon if available
       if (ev.platforms && ev.platforms.length > 0 && platformLogos[ev.platforms[0]]) {
         const icon = document.createElement('img');
         icon.src = platformLogos[ev.platforms[0]];
@@ -1259,7 +1399,7 @@ function renderCalendar() {
       moreItem.style.fontStyle = 'italic';
       moreItem.innerText = `+${remainingCount} more`;
       moreItem.onclick = () => {
-        alert('All events on ' + dateStr + ':\n\n' + dayEvents.map(e => '• ' + e.title).join('\n'));
+        showAllEventsForDate(dateStr, dayEvents);
       };
       dayCell.appendChild(moreItem);
     }
@@ -1285,7 +1425,6 @@ function renderMini() {
   const startOffset = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
   
-  // Empty cells
   for (let i = 0; i < startOffset; i++) {
     const e = document.createElement('div');
     e.style.opacity = '0';
@@ -1293,7 +1432,6 @@ function renderMini() {
     mini.appendChild(e);
   }
   
-  // Days
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const hasEvents = eventsData.some(ev => ev.event_date === dateStr);
@@ -1310,14 +1448,124 @@ function renderMini() {
 }
 
 function showEventDetails(ev) {
-  let details = `${ev.title}\n\n${ev.description || 'No description'}`;
+  currentEventDetails = ev;
+  
+  document.getElementById('detailsEventTitle').innerText = ev.title;
+  document.getElementById('detailsEventDescription').innerText = ev.description || 'No description provided';
+  document.getElementById('detailsEventDate').innerText = new Date(ev.event_date + 'T00:00:00').toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+  
+  // Tags
+  const tagsRow = document.getElementById('detailsTagsRow');
+  const tagsContainer = document.getElementById('detailsEventTags');
   if (ev.tags && ev.tags.length > 0) {
-    details += `\n\nTags: ${ev.tags.join(', ')}`;
+    tagsRow.style.display = 'block';
+    tagsContainer.innerHTML = '';
+    ev.tags.forEach(tag => {
+      const badge = document.createElement('div');
+      badge.className = 'tag-badge';
+      badge.innerText = tag;
+      tagsContainer.appendChild(badge);
+    });
+  } else {
+    tagsRow.style.display = 'none';
   }
+  
+  // Platforms
+  const platformsRow = document.getElementById('detailsPlatformsRow');
+  const platformsContainer = document.getElementById('detailsEventPlatforms');
   if (ev.platforms && ev.platforms.length > 0) {
-    details += `\n\nPlatforms: ${ev.platforms.join(', ')}`;
+    platformsRow.style.display = 'block';
+    platformsContainer.innerHTML = '';
+    ev.platforms.forEach(platform => {
+      const badge = document.createElement('div');
+      badge.className = 'platform-badge';
+      
+      if (platformLogos[platform]) {
+        const icon = document.createElement('img');
+        icon.src = platformLogos[platform];
+        icon.style.width = '16px';
+        icon.style.height = '16px';
+        icon.style.filter = 'invert(1) brightness(2)';
+        badge.appendChild(icon);
+      }
+      
+      const label = document.createElement('span');
+      label.innerText = platform;
+      badge.appendChild(label);
+      
+      platformsContainer.appendChild(badge);
+    });
+  } else {
+    platformsRow.style.display = 'none';
   }
-  alert(details);
+  
+  document.getElementById('eventDetailsModal').classList.add('active');
+}
+
+function closeEventDetailsModal() {
+  document.getElementById('eventDetailsModal').classList.remove('active');
+  currentEventDetails = null;
+}
+
+async function deleteCurrentEvent() {
+  if (!currentEventDetails) return;
+  
+  if (!confirm(`Are you sure you want to delete "${currentEventDetails.title}"?`)) {
+    return;
+  }
+  
+  try {
+    const response = await fetch(`/api/events/${currentEventDetails.id}`, {
+      method: 'DELETE',
+      credentials: 'same-origin'
+    });
+    
+    if (response.ok) {
+      closeEventDetailsModal();
+      await loadEvents();
+    } else {
+      alert('Error deleting event');
+    }
+  } catch (e) {
+    console.error('Error:', e);
+    alert('Error deleting event');
+  }
+}
+
+function showAllEventsForDate(dateStr, events) {
+  const formatted = new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+  
+  let message = `All events on ${formatted}:\n\n`;
+  events.forEach(ev => {
+    message += `• ${ev.title}\n`;
+    if (ev.description) {
+      message += `  ${ev.description}\n`;
+    }
+    message += '\n';
+  });
+  
+  alert(message);
+}
+
+function openEventModalForDate(dateStr) {
+  document.getElementById('eventModal').classList.add('active');
+  document.getElementById('eventDate').value = dateStr;
+  selectedTags = [];
+  selectedPlatforms = [];
+  updateDropdownDisplay('tagsSelect', 'tagsDisplay', selectedTags);
+  updateDropdownDisplay('platformsSelect', 'platformsDisplay', selectedPlatforms);
+  updateCheckboxes('tagsItems', selectedTags);
+  updateCheckboxes('platformsItems', selectedPlatforms);
 }
 
 function prevMonth() {
@@ -1355,7 +1603,6 @@ function closeEventModal() {
 }
 
 function initDropdowns() {
-  // Tags dropdown
   const tagsItems = document.getElementById('tagsItems');
   tags.forEach(tag => {
     const item = document.createElement('div');
@@ -1368,7 +1615,6 @@ function initDropdowns() {
     tagsItems.appendChild(item);
   });
   
-  // Platforms dropdown
   const platformsItems = document.getElementById('platformsItems');
   platforms.forEach(platform => {
     const item = document.createElement('div');
@@ -1401,7 +1647,6 @@ function toggleDropdown(selectId) {
   const select = document.getElementById(selectId);
   const items = select.querySelector('.select-items');
   
-  // Close other dropdowns
   document.querySelectorAll('.custom-select').forEach(s => {
     if (s.id !== selectId) {
       s.classList.remove('active');
@@ -1452,7 +1697,6 @@ function updateCheckboxes(itemsId, array) {
   });
 }
 
-// Close dropdowns when clicking outside
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.custom-select')) {
     document.querySelectorAll('.custom-select').forEach(s => {
@@ -1462,14 +1706,18 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// Close modal when clicking outside
 document.getElementById('eventModal').addEventListener('click', (e) => {
   if (e.target.id === 'eventModal') {
     closeEventModal();
   }
 });
 
-// Form submission
+document.getElementById('eventDetailsModal').addEventListener('click', (e) => {
+  if (e.target.id === 'eventDetailsModal') {
+    closeEventDetailsModal();
+  }
+});
+
 document.getElementById('eventForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   
@@ -1500,6 +1748,194 @@ document.getElementById('eventForm').addEventListener('submit', async (e) => {
   }
 });
 
+// Profile Picture Functions
+function openProfilePicModal() {
+  document.getElementById('profilePicModal').classList.add('active');
+}
+
+function closeProfilePicModal() {
+  document.getElementById('profilePicModal').classList.remove('active');
+  document.getElementById('profilePicInput').value = '';
+  document.getElementById('cropperContainer').style.display = 'none';
+  document.getElementById('uploadPicBtn').style.display = 'none';
+  cropImage = null;
+}
+
+function loadImageForCrop(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      cropImage = img;
+      initCropper();
+      document.getElementById('cropperContainer').style.display = 'block';
+      document.getElementById('uploadPicBtn').style.display = 'inline-block';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function initCropper() {
+  cropCanvas = document.getElementById('cropperCanvas');
+  cropCtx = cropCanvas.getContext('2d');
+  
+  const maxWidth = 400;
+  const scale = Math.min(1, maxWidth / cropImage.width);
+  cropCanvas.width = cropImage.width * scale;
+  cropCanvas.height = cropImage.height * scale;
+  
+  cropCtx.drawImage(cropImage, 0, 0, cropCanvas.width, cropCanvas.height);
+  
+  const size = Math.min(cropCanvas.width, cropCanvas.height);
+  cropStartX = (cropCanvas.width - size) / 2;
+  cropStartY = (cropCanvas.height - size) / 2;
+  cropEndX = cropStartX + size;
+  cropEndY = cropStartY + size;
+  
+  drawCropOverlay();
+  updatePreview();
+  
+  cropCanvas.onmousedown = startCrop;
+  cropCanvas.onmousemove = updateCrop;
+  cropCanvas.onmouseup = endCrop;
+  cropCanvas.ontouchstart = handleTouchStart;
+  cropCanvas.ontouchmove = handleTouchMove;
+  cropCanvas.ontouchend = endCrop;
+}
+
+function startCrop(e) {
+  isCropping = true;
+  const rect = cropCanvas.getBoundingClientRect();
+  cropStartX = e.clientX - rect.left;
+  cropStartY = e.clientY - rect.top;
+}
+
+function updateCrop(e) {
+  if (!isCropping) return;
+  const rect = cropCanvas.getBoundingClientRect();
+  cropEndX = e.clientX - rect.left;
+  cropEndY = e.clientY - rect.top;
+  
+  const size = Math.min(Math.abs(cropEndX - cropStartX), Math.abs(cropEndY - cropStartY));
+  cropEndX = cropStartX + (cropEndX > cropStartX ? size : -size);
+  cropEndY = cropStartY + (cropEndY > cropStartY ? size : -size);
+  
+  drawCropOverlay();
+  updatePreview();
+}
+
+function endCrop() {
+  isCropping = false;
+}
+
+function handleTouchStart(e) {
+  e.preventDefault();
+  const touch = e.touches[0];
+  const rect = cropCanvas.getBoundingClientRect();
+  cropStartX = touch.clientX - rect.left;
+  cropStartY = touch.clientY - rect.top;
+  isCropping = true;
+}
+
+function handleTouchMove(e) {
+  if (!isCropping) return;
+  e.preventDefault();
+  const touch = e.touches[0];
+  const rect = cropCanvas.getBoundingClientRect();
+  cropEndX = touch.clientX - rect.left;
+  cropEndY = touch.clientY - rect.top;
+  
+  const size = Math.min(Math.abs(cropEndX - cropStartX), Math.abs(cropEndY - cropStartY));
+  cropEndX = cropStartX + (cropEndX > cropStartX ? size : -size);
+  cropEndY = cropStartY + (cropEndY > cropStartY ? size : -size);
+  
+  drawCropOverlay();
+  updatePreview();
+}
+
+function drawCropOverlay() {
+  cropCtx.clearRect(0, 0, cropCanvas.width, cropCanvas.height);
+  cropCtx.drawImage(cropImage, 0, 0, cropCanvas.width, cropCanvas.height);
+  
+  cropCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+  
+  const x = Math.min(cropStartX, cropEndX);
+  const y = Math.min(cropStartY, cropEndY);
+  const w = Math.abs(cropEndX - cropStartX);
+  const h = Math.abs(cropEndY - cropStartY);
+  
+  cropCtx.clearRect(x, y, w, h);
+  cropCtx.drawImage(cropImage, 0, 0, cropCanvas.width, cropCanvas.height);
+  cropCtx.strokeStyle = '#00e5ff';
+  cropCtx.lineWidth = 2;
+  cropCtx.strokeRect(x, y, w, h);
+}
+
+function updatePreview() {
+  const previewCanvas = document.getElementById('previewCanvas');
+  const previewCtx = previewCanvas.getContext('2d');
+  
+  const x = Math.min(cropStartX, cropEndX);
+  const y = Math.min(cropStartY, cropEndY);
+  const w = Math.abs(cropEndX - cropStartX);
+  const h = Math.abs(cropEndY - cropStartY);
+  
+  const scale = cropCanvas.width / cropImage.width;
+  const srcX = x / scale;
+  const srcY = y / scale;
+  const srcW = w / scale;
+  const srcH = h / scale;
+  
+  previewCtx.clearRect(0, 0, 150, 150);
+  previewCtx.drawImage(cropImage, srcX, srcY, srcW, srcH, 0, 0, 150, 150);
+}
+
+async function uploadProfilePic() {
+  const previewCanvas = document.getElementById('previewCanvas');
+  const dataURL = previewCanvas.toDataURL('image/jpeg', 0.9);
+  
+  try {
+    const response = await fetch('/api/profile-picture', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ picture: dataURL })
+    });
+    
+    if (response.ok) {
+      const profilePicDisplay = document.getElementById('profilePicDisplay');
+      if (profilePicDisplay.tagName === 'IMG') {
+        profilePicDisplay.src = dataURL;
+      } else {
+        const img = document.createElement('img');
+        img.src = dataURL;
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = 'cover';
+        document.getElementById('profilePicContainer').innerHTML = '';
+        document.getElementById('profilePicContainer').appendChild(img);
+      }
+      
+      closeProfilePicModal();
+    } else {
+      alert('Error uploading profile picture');
+    }
+  } catch (e) {
+    console.error('Error:', e);
+    alert('Error uploading profile picture');
+  }
+}
+
+document.getElementById('profilePicModal').addEventListener('click', (e) => {
+  if (e.target.id === 'profilePicModal') {
+    closeProfilePicModal();
+  }
+});
+
 // Initialize on load
 console.log('=== SCRIPT LOADING ===');
 console.log('Document ready state:', document.readyState);
@@ -1518,7 +1954,6 @@ window.addEventListener('load', function() {
   }, 100);
 });
 
-// Fallback initialization
 if (document.readyState === 'complete') {
   console.log('Document already complete, initializing now...');
   setTimeout(function() {
