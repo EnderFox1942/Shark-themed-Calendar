@@ -1054,6 +1054,7 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
 
 <script>
 // Platform logo URLs
+// Platform logo URLs
 const platformLogos = {
   'GitHub': 'https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/github.svg',
   'Roblox': 'https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/roblox.svg',
@@ -1078,47 +1079,99 @@ console.log('Device detected:', isMobile ? 'Mobile' : 'Desktop');
 
 // Initialize
 async function init() {
-  await loadEvents();
+  console.log('=== INIT STARTED ===');
+  console.log('Current month:', currentMonth, 'Current year:', currentYear);
+  
+  // Check critical elements exist
+  const calGrid = document.getElementById('calendarGrid');
+  const miniGrid = document.getElementById('miniGrid');
+  console.log('calendarGrid exists:', !!calGrid);
+  console.log('miniGrid exists:', !!miniGrid);
+  
+  if (!calGrid || !miniGrid) {
+    console.error('CRITICAL: Required DOM elements not found!');
+    alert('Error: Calendar elements not found. Please refresh the page.');
+    return;
+  }
+  
   initDropdowns();
+  await loadEvents();
+  console.log('=== INIT COMPLETED ===');
 }
 
 async function fetchEvents() {
   try {
     console.log('Fetching events from /api/events...');
-    const r = await fetch('/api/events');
+    const r = await fetch('/api/events', {
+      credentials: 'same-origin',
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
     console.log('Response status:', r.status);
-    if (!r.ok) {
-      console.error('Response not OK:', r.status);
+    
+    if (r.status === 401 || r.status === 403) {
+      console.error('Authentication error - redirecting to login');
+      window.location.href = '/login';
       return [];
     }
+    
+    if (!r.ok) {
+      console.error('Response not OK:', r.status, await r.text());
+      return [];
+    }
+    
     const data = await r.json();
-    console.log('Events loaded:', data.length);
-    return data;
+    console.log('Events loaded successfully:', data.length, 'events');
+    console.log('Sample event:', data[0]);
+    return Array.isArray(data) ? data : [];
   } catch (e) {
-    console.error('Error fetching events:', e);
+    console.error('FETCH ERROR:', e);
+    console.error('Error stack:', e.stack);
     return [];
   }
 }
 
 async function loadEvents() {
-  console.log('loadEvents called');
+  console.log('=== loadEvents called ===');
   try {
     eventsData = await fetchEvents();
-    console.log('Events data:', eventsData);
+    console.log('Events data stored:', eventsData.length, 'events');
+    console.log('Calling renderCalendar...');
+    renderCalendar();
+    console.log('Calling renderMini...');
+    renderMini();
+    console.log('=== loadEvents completed successfully ===');
+  } catch (e) {
+    console.error('ERROR in loadEvents:', e);
+    console.error('Error stack:', e.stack);
+    
+    // Still try to render empty calendar
+    eventsData = [];
     renderCalendar();
     renderMini();
-  } catch (e) {
-    console.error('Error in loadEvents:', e);
   }
 }
 
 function renderCalendar() {
-  console.log('renderCalendar called');
-  document.getElementById('mainMonthTitle').innerText = monthNames[currentMonth-1] + ' ' + currentYear;
-  document.getElementById('sidebarMonthTitle').innerText = monthNames[currentMonth-1];
+  console.log('=== renderCalendar START ===');
+  console.log('Current month:', currentMonth, 'Year:', currentYear);
+  console.log('Events to render:', eventsData.length);
+  
+  const mainTitle = document.getElementById('mainMonthTitle');
+  const sideTitle = document.getElementById('sidebarMonthTitle');
+  
+  if (!mainTitle || !sideTitle) {
+    console.error('CRITICAL: Title elements not found!');
+    return;
+  }
+  
+  mainTitle.innerText = monthNames[currentMonth-1] + ' ' + currentYear;
+  sideTitle.innerText = monthNames[currentMonth-1];
   
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  console.log('Today:', todayStr);
   
   const first = new Date(currentYear, currentMonth-1, 1);
   const startOffset = (first.getDay() + 6) % 7; // Monday = 0
@@ -1128,12 +1181,16 @@ function renderCalendar() {
   
   const grid = document.getElementById('calendarGrid');
   if (!grid) {
-    console.error('calendarGrid element not found!');
+    console.error('CRITICAL: calendarGrid element not found!');
+    alert('Error: Calendar grid not found. Please refresh the page.');
     return;
   }
+  
+  console.log('Clearing calendar grid...');
   grid.innerHTML = '';
   
   // Add empty cells for offset
+  console.log('Adding', startOffset, 'empty cells...');
   for (let i = 0; i < startOffset; i++) {
     const emptyCell = document.createElement('div');
     emptyCell.className = 'cal-day';
@@ -1143,6 +1200,7 @@ function renderCalendar() {
   }
   
   // Add days
+  console.log('Adding', daysInMonth, 'day cells...');
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const dayEvents = eventsData.filter(e => e.event_date === dateStr);
@@ -1152,9 +1210,11 @@ function renderCalendar() {
     
     if (dateStr === todayStr) {
       dayCell.classList.add('today-highlight');
+      console.log('Today cell:', d);
     }
     if (dayEvents.length > 0) {
       dayCell.classList.add('has-events-day');
+      console.log('Day', d, 'has', dayEvents.length, 'events');
     }
     
     const dateNum = document.createElement('div');
@@ -1199,17 +1259,14 @@ function renderCalendar() {
       moreItem.style.fontStyle = 'italic';
       moreItem.innerText = `+${remainingCount} more`;
       moreItem.onclick = () => {
-        alert('All events on ' + dateStr + ':
-
-' + dayEvents.map(e => '• ' + e.title).join('
-'));
+        alert('All events on ' + dateStr + ':\n\n' + dayEvents.map(e => '• ' + e.title).join('\n'));
       };
       dayCell.appendChild(moreItem);
     }
     
     grid.appendChild(dayCell);
   }
-  console.log('Calendar rendered successfully with', daysInMonth, 'days');
+  console.log('=== renderCalendar SUCCESS: Added', grid.children.length, 'total cells ===');
 }
 
 function renderMini() {
@@ -1253,18 +1310,12 @@ function renderMini() {
 }
 
 function showEventDetails(ev) {
-  let details = `${ev.title}
-
-${ev.description || 'No description'}`;
+  let details = `${ev.title}\n\n${ev.description || 'No description'}`;
   if (ev.tags && ev.tags.length > 0) {
-    details += `
-
-Tags: ${ev.tags.join(', ')}`;
+    details += `\n\nTags: ${ev.tags.join(', ')}`;
   }
   if (ev.platforms && ev.platforms.length > 0) {
-    details += `
-
-Platforms: ${ev.platforms.join(', ')}`;
+    details += `\n\nPlatforms: ${ev.platforms.join(', ')}`;
   }
   alert(details);
 }
@@ -1450,12 +1501,35 @@ document.getElementById('eventForm').addEventListener('submit', async (e) => {
 });
 
 // Initialize on load
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
+console.log('=== SCRIPT LOADING ===');
+console.log('Document ready state:', document.readyState);
+
+window.addEventListener('load', function() {
+  console.log('=== WINDOW LOAD EVENT FIRED ===');
+  console.log('Starting initialization in 100ms...');
+  
+  setTimeout(function() {
+    console.log('Calling init()...');
+    init().catch(err => {
+      console.error('INIT FAILED:', err);
+      console.error('Stack:', err.stack);
+      alert('Error loading calendar. Check console for details.');
+    });
+  }, 100);
+});
+
+// Fallback initialization
+if (document.readyState === 'complete') {
+  console.log('Document already complete, initializing now...');
+  setTimeout(function() {
+    init().catch(err => {
+      console.error('INIT FAILED:', err);
+      alert('Error loading calendar. Check console for details.');
+    });
+  }, 100);
 }
-console.log('Script loaded, init scheduled');
+
+console.log('=== SCRIPT LOADED ===');
 </script>
 </body>
 </html>'''
