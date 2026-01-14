@@ -65,6 +65,15 @@ def load_environment() -> Dict[str, str]:
     env_vars['APP_HOST'] = os.environ.get('APP_HOST', '0.0.0.0')
     logger.info(f"✅ APP_HOST = {env_vars['APP_HOST']}")
     logger.info(f"✅ APP_PORT = {env_vars['APP_PORT']}")
+    
+    # Load IP blacklist (comma-separated list)
+    blacklist = os.environ.get('IP_BLACKLIST', '')
+    env_vars['IP_BLACKLIST'] = [ip.strip() for ip in blacklist.split(',') if ip.strip()]
+    if env_vars['IP_BLACKLIST']:
+        logger.info(f"🚫 IP Blacklist: {len(env_vars['IP_BLACKLIST'])} addresses blocked")
+    else:
+        logger.info("ℹ️  No IP addresses blacklisted")
+    
     logger.info("✅ All environment variables loaded successfully")
     return env_vars
 
@@ -345,6 +354,7 @@ class SharkCalendarApp:
             env_vars['SUPABASE_KEY'],
             env_vars.get('SUPABASE_POOLER_URL')
         )
+        self.ip_blacklist = set(env_vars.get('IP_BLACKLIST', []))
         self.tags = [
             "Coding Project",
             "College Assignment",
@@ -392,6 +402,9 @@ class SharkCalendarApp:
         )
 
     def setup_routes(self):
+        # Add middleware for IP blocking
+        self.app.middlewares.append(self.ip_blocking_middleware)
+        
         self.app.router.add_get('/health', self.health_check)
         self.app.router.add_get('/favicon.ico', self.serve_favicon)
         self.app.router.add_get('/login', self.login_page)
@@ -405,6 +418,34 @@ class SharkCalendarApp:
         self.app.router.add_post('/api/profile-picture', self.upload_profile_picture)
         self.app.router.add_get('/api/profile-picture', self.get_profile_picture)
         logger.info("✅ Routes configured")
+    
+    @web.middleware
+    async def ip_blocking_middleware(self, request: web.Request, handler):
+        # Get client IP
+        client_ip = request.remote
+        
+        # Check X-Forwarded-For header (for proxies/load balancers)
+        forwarded_for = request.headers.get('X-Forwarded-For')
+        if forwarded_for:
+            client_ip = forwarded_for.split(',')[0].strip()
+        
+        # Log all login page accesses
+        if request.path == '/login':
+            logger.info(f"🔐 Login page accessed from IP: {client_ip}")
+        
+        # Check if IP is blacklisted
+        if client_ip in self.ip_blacklist:
+            logger.warning(f"🚫 Blocked access from blacklisted IP: {client_ip}")
+            return await self.error_403(request)
+        
+        try:
+            return await handler(request)
+        except web.HTTPException as ex:
+            if ex.status == 404:
+                return await self.error_404(request)
+            elif ex.status == 403:
+                return await self.error_403(request)
+            raise
 
     async def health_check(self, request: web.Request):
         return web.json_response({
@@ -420,6 +461,292 @@ class SharkCalendarApp:
         </svg>'''
         return web.Response(body=svg_favicon, content_type='image/svg+xml',
                             headers={'Cache-Control': 'public, max-age=604800'})
+    
+    async def error_404(self, request: web.Request):
+        """Custom 404 error page with shark theme"""
+        html = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🦈 404 - Not Found</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Space Mono', monospace;
+            background: linear-gradient(180deg, #001a33 0%, #003d5c 50%, #0066a1 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            overflow: hidden;
+            position: relative;
+        }
+        .water-effect {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            opacity: 0.1;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 217, 255, 0.1) 2px,
+                rgba(0, 217, 255, 0.1) 4px
+            );
+            animation: wave 20s linear infinite;
+        }
+        @keyframes wave {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(40px); }
+        }
+        .error-container {
+            background: rgba(0, 26, 51, 0.85);
+            backdrop-filter: blur(20px);
+            border: 2px solid rgba(0, 217, 255, 0.3);
+            border-radius: 16px;
+            padding: 60px 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 0 60px rgba(0, 217, 255, 0.2);
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+        .shark-logo { 
+            font-size: 120px; 
+            margin-bottom: 20px;
+            animation: float 3s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+        .error-code {
+            font-family: 'Bebas Neue', cursive;
+            color: #00d9ff;
+            font-size: 6em;
+            letter-spacing: 12px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px rgba(0, 217, 255, 0.6);
+            animation: glow 2s ease-in-out infinite;
+        }
+        @keyframes glow {
+            0%, 100% { text-shadow: 0 0 30px rgba(0, 217, 255, 0.6); }
+            50% { text-shadow: 0 0 50px rgba(0, 217, 255, 0.9); }
+        }
+        .error-title {
+            font-family: 'Bebas Neue', cursive;
+            color: #00d9ff;
+            font-size: 2em;
+            letter-spacing: 4px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+        }
+        .error-message {
+            color: #e8f4f8;
+            font-size: 1.1em;
+            line-height: 1.6;
+            margin-bottom: 30px;
+            opacity: 0.8;
+        }
+        .btn-home {
+            display: inline-block;
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #0066a1 0%, #003d5c 100%);
+            color: #e8f4f8;
+            border: 2px solid #00d9ff;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Space Mono', monospace;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.3s;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .btn-home:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0, 217, 255, 0.5);
+        }
+        .wave-lines {
+            margin: 30px 0;
+            height: 2px;
+            background: linear-gradient(90deg, 
+                transparent,
+                rgba(0, 217, 255, 0.5),
+                transparent
+            );
+        }
+    </style>
+</head>
+<body>
+    <div class="water-effect"></div>
+    <div class="error-container">
+        <div class="shark-logo">🦈</div>
+        <div class="error-code">404</div>
+        <div class="error-title">Lost in the Deep</div>
+        <div class="wave-lines"></div>
+        <div class="error-message">
+            The page you're looking for has swum away...<br>
+            Or maybe it never existed in these waters.
+        </div>
+        <a href="/" class="btn-home">🏠 Return to Surface</a>
+    </div>
+</body>
+</html>'''
+        return web.Response(text=html, content_type='text/html', status=404)
+    
+    async def error_403(self, request: web.Request):
+        """Custom 403 forbidden page with shark theme"""
+        html = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🦈 403 - Access Denied</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Space Mono', monospace;
+            background: linear-gradient(180deg, #1a0000 0%, #3d0000 50%, #660000 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            overflow: hidden;
+            position: relative;
+        }
+        .danger-effect {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            opacity: 0.1;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 20px,
+                rgba(255, 0, 0, 0.1) 20px,
+                rgba(255, 0, 0, 0.1) 40px
+            );
+            animation: danger 4s linear infinite;
+        }
+        @keyframes danger {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(40px); }
+        }
+        .error-container {
+            background: rgba(26, 0, 0, 0.85);
+            backdrop-filter: blur(20px);
+            border: 2px solid rgba(255, 71, 87, 0.5);
+            border-radius: 16px;
+            padding: 60px 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 0 60px rgba(255, 71, 87, 0.3);
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+        .shark-logo { 
+            font-size: 120px; 
+            margin-bottom: 20px;
+            animation: shake 0.5s ease-in-out infinite;
+        }
+        @keyframes shake {
+            0%, 100% { transform: rotate(-5deg); }
+            50% { transform: rotate(5deg); }
+        }
+        .error-code {
+            font-family: 'Bebas Neue', cursive;
+            color: #ff4757;
+            font-size: 6em;
+            letter-spacing: 12px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px rgba(255, 71, 87, 0.8);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { text-shadow: 0 0 30px rgba(255, 71, 87, 0.8); }
+            50% { text-shadow: 0 0 50px rgba(255, 71, 87, 1); }
+        }
+        .error-title {
+            font-family: 'Bebas Neue', cursive;
+            color: #ff4757;
+            font-size: 2em;
+            letter-spacing: 4px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+        }
+        .error-message {
+            color: #f8d7da;
+            font-size: 1.1em;
+            line-height: 1.6;
+            margin-bottom: 30px;
+            opacity: 0.9;
+        }
+        .warning-icon {
+            font-size: 60px;
+            margin: 20px 0;
+            animation: blink 1s ease-in-out infinite;
+        }
+        @keyframes blink {
+            0%, 49% { opacity: 1; }
+            50%, 100% { opacity: 0.3; }
+        }
+        .btn-home {
+            display: inline-block;
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #660000 0%, #3d0000 100%);
+            color: #f8d7da;
+            border: 2px solid #ff4757;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Space Mono', monospace;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.3s;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .btn-home:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(255, 71, 87, 0.5);
+        }
+        .danger-lines {
+            margin: 30px 0;
+            height: 3px;
+            background: linear-gradient(90deg, 
+                transparent,
+                rgba(255, 71, 87, 0.7),
+                transparent
+            );
+        }
+    </style>
+</head>
+<body>
+    <div class="danger-effect"></div>
+    <div class="error-container">
+        <div class="shark-logo">🦈</div>
+        <div class="error-code">403</div>
+        <div class="error-title">Access Denied</div>
+        <div class="warning-icon">⚠️</div>
+        <div class="danger-lines"></div>
+        <div class="error-message">
+            You don't have permission to enter these waters.<br>
+            This area is restricted. Turn back now.
+        </div>
+        <a href="/" class="btn-home">🔒 Go Back</a>
+    </div>
+</body>
+</html>'''
+        return web.Response(text=html, content_type='text/html', status=403)
 
     @aiohttp_jinja2.template('login.html')
     async def login_page(self, request: web.Request):
