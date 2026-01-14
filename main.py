@@ -351,7 +351,9 @@ class SharkCalendarApp:
             "Video",
             "Stream",
             "Personal",
-            "Work"
+            "Work",
+            "University",
+            "Gaming"
         ]
         self.platforms = [
             "GitHub",
@@ -359,7 +361,12 @@ class SharkCalendarApp:
             "Discord",
             "Teams",
             "YouTube",
-            "Twitch"
+            "Twitch",
+            "UCAS",
+            "Valorant",
+            "League of Legends",
+            "Overwatch",
+            "Steam"
         ]
         self.app = web.Application()
         logger.info("🔧 Setting up session management...")
@@ -1135,25 +1142,46 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
 <div class="modal" id="eventDetailsModal">
   <div class="modal-content">
     <div class="modal-header" id="detailsEventTitle">Event Details</div>
-    <div class="event-detail-row">
-      <div class="event-detail-label">Description</div>
-      <div class="event-detail-value" id="detailsEventDescription">-</div>
+    
+    <div class="form-group">
+      <label class="form-label">Event Title</label>
+      <input type="text" class="form-input" id="editEventTitle" placeholder="Event title">
     </div>
-    <div class="event-detail-row">
-      <div class="event-detail-label">Date</div>
-      <div class="event-detail-value" id="detailsEventDate">-</div>
+    
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <textarea class="form-textarea" id="editEventDescription" placeholder="Event description..."></textarea>
     </div>
-    <div class="event-detail-row" id="detailsTagsRow" style="display:none;">
-      <div class="event-detail-label">Tags</div>
-      <div class="event-detail-tags" id="detailsEventTags"></div>
+    
+    <div class="form-group">
+      <label class="form-label">Date</label>
+      <input type="date" class="form-input" id="editEventDate">
     </div>
-    <div class="event-detail-row" id="detailsPlatformsRow" style="display:none;">
-      <div class="event-detail-label">Platforms</div>
-      <div class="event-detail-platforms" id="detailsEventPlatforms"></div>
+    
+    <div class="form-group">
+      <label class="form-label">Tags</label>
+      <div class="custom-select" id="editTagsSelect">
+        <div class="select-selected" onclick="toggleDropdown('editTagsSelect')">
+          <span id="editTagsDisplay">Select tags...</span>
+        </div>
+        <div class="select-items" id="editTagsItems"></div>
+      </div>
     </div>
+    
+    <div class="form-group">
+      <label class="form-label">Platforms</label>
+      <div class="custom-select" id="editPlatformsSelect">
+        <div class="select-selected" onclick="toggleDropdown('editPlatformsSelect')">
+          <span id="editPlatformsDisplay">Select platforms...</span>
+        </div>
+        <div class="select-items" id="editPlatformsItems"></div>
+      </div>
+    </div>
+    
     <div class="modal-actions">
-      <button type="button" class="btn" onclick="closeEventDetailsModal()">Close</button>
+      <button type="button" class="btn" onclick="closeEventDetailsModal()">Cancel</button>
       <button type="button" class="btn btn-danger" onclick="deleteCurrentEvent()">Delete Event</button>
+      <button type="button" class="btn" onclick="saveEventChanges()">Save Changes</button>
     </div>
   </div>
 </div>
@@ -1188,7 +1216,12 @@ const platformLogos = {
   'Discord': 'https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/discord.svg',
   'Teams': 'https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/microsoftteams.svg',
   'YouTube': 'https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/youtube.svg',
-  'Twitch': 'https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/twitch.svg'
+  'Twitch': 'https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/twitch.svg',
+  'UCAS': 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"%3E%3Ctext y="18" font-size="18"%3E🎓%3C/text%3E%3C/svg%3E',
+  'Valorant': 'https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/riotgames.svg',
+  'League of Legends': 'https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/leagueoflegends.svg',
+  'Overwatch': 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"%3E%3Ctext y="18" font-size="18"%3E⚡%3C/text%3E%3C/svg%3E',
+  'Steam': 'https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/steam.svg'
 };
 
 const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -1199,6 +1232,8 @@ const tags = {{ tags|tojson }};
 const platforms = {{ platforms|tojson }};
 let selectedTags = [];
 let selectedPlatforms = [];
+let selectedEditTags = [];
+let selectedEditPlatforms = [];
 let currentEventDetails = null;
 
 // Image cropping variables
@@ -1450,59 +1485,21 @@ function renderMini() {
 function showEventDetails(ev) {
   currentEventDetails = ev;
   
+  // Populate edit fields
   document.getElementById('detailsEventTitle').innerText = ev.title;
-  document.getElementById('detailsEventDescription').innerText = ev.description || 'No description provided';
-  document.getElementById('detailsEventDate').innerText = new Date(ev.event_date + 'T00:00:00').toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  });
+  document.getElementById('editEventTitle').value = ev.title;
+  document.getElementById('editEventDescription').value = ev.description || '';
+  document.getElementById('editEventDate').value = ev.event_date;
   
-  // Tags
-  const tagsRow = document.getElementById('detailsTagsRow');
-  const tagsContainer = document.getElementById('detailsEventTags');
-  if (ev.tags && ev.tags.length > 0) {
-    tagsRow.style.display = 'block';
-    tagsContainer.innerHTML = '';
-    ev.tags.forEach(tag => {
-      const badge = document.createElement('div');
-      badge.className = 'tag-badge';
-      badge.innerText = tag;
-      tagsContainer.appendChild(badge);
-    });
-  } else {
-    tagsRow.style.display = 'none';
-  }
+  // Set up edit tags
+  selectedEditTags = ev.tags ? [...ev.tags] : [];
+  updateDropdownDisplay('editTagsSelect', 'editTagsDisplay', selectedEditTags);
+  updateCheckboxes('editTagsItems', selectedEditTags);
   
-  // Platforms
-  const platformsRow = document.getElementById('detailsPlatformsRow');
-  const platformsContainer = document.getElementById('detailsEventPlatforms');
-  if (ev.platforms && ev.platforms.length > 0) {
-    platformsRow.style.display = 'block';
-    platformsContainer.innerHTML = '';
-    ev.platforms.forEach(platform => {
-      const badge = document.createElement('div');
-      badge.className = 'platform-badge';
-      
-      if (platformLogos[platform]) {
-        const icon = document.createElement('img');
-        icon.src = platformLogos[platform];
-        icon.style.width = '16px';
-        icon.style.height = '16px';
-        icon.style.filter = 'invert(1) brightness(2)';
-        badge.appendChild(icon);
-      }
-      
-      const label = document.createElement('span');
-      label.innerText = platform;
-      badge.appendChild(label);
-      
-      platformsContainer.appendChild(badge);
-    });
-  } else {
-    platformsRow.style.display = 'none';
-  }
+  // Set up edit platforms
+  selectedEditPlatforms = ev.platforms ? [...ev.platforms] : [];
+  updateDropdownDisplay('editPlatformsSelect', 'editPlatformsDisplay', selectedEditPlatforms);
+  updateCheckboxes('editPlatformsItems', selectedEditPlatforms);
   
   document.getElementById('eventDetailsModal').classList.add('active');
 }
@@ -1510,6 +1507,37 @@ function showEventDetails(ev) {
 function closeEventDetailsModal() {
   document.getElementById('eventDetailsModal').classList.remove('active');
   currentEventDetails = null;
+}
+
+async function saveEventChanges() {
+  if (!currentEventDetails) return;
+  
+  const updatedData = {
+    title: document.getElementById('editEventTitle').value,
+    description: document.getElementById('editEventDescription').value,
+    event_date: document.getElementById('editEventDate').value,
+    tags: selectedEditTags,
+    platforms: selectedEditPlatforms
+  };
+  
+  try {
+    const response = await fetch(`/api/events/${currentEventDetails.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(updatedData)
+    });
+    
+    if (response.ok) {
+      closeEventDetailsModal();
+      await loadEvents();
+    } else {
+      alert('Error updating event');
+    }
+  } catch (e) {
+    console.error('Error:', e);
+    alert('Error updating event');
+  }
 }
 
 async function deleteCurrentEvent() {
@@ -1603,6 +1631,7 @@ function closeEventModal() {
 }
 
 function initDropdowns() {
+  // Tags dropdown for create modal
   const tagsItems = document.getElementById('tagsItems');
   tags.forEach(tag => {
     const item = document.createElement('div');
@@ -1615,6 +1644,7 @@ function initDropdowns() {
     tagsItems.appendChild(item);
   });
   
+  // Platforms dropdown for create modal
   const platformsItems = document.getElementById('platformsItems');
   platforms.forEach(platform => {
     const item = document.createElement('div');
@@ -1641,6 +1671,47 @@ function initDropdowns() {
     
     platformsItems.appendChild(item);
   });
+  
+  // Tags dropdown for edit modal
+  const editTagsItems = document.getElementById('editTagsItems');
+  tags.forEach(tag => {
+    const item = document.createElement('div');
+    item.className = 'multi-select-item';
+    item.innerHTML = `
+      <div class="checkbox-custom" data-value="${tag}"></div>
+      <span>${tag}</span>
+    `;
+    item.onclick = () => toggleMultiSelect(tag, 'editTags');
+    editTagsItems.appendChild(item);
+  });
+  
+  // Platforms dropdown for edit modal
+  const editPlatformsItems = document.getElementById('editPlatformsItems');
+  platforms.forEach(platform => {
+    const item = document.createElement('div');
+    item.className = 'multi-select-item';
+    
+    const checkbox = document.createElement('div');
+    checkbox.className = 'checkbox-custom';
+    checkbox.setAttribute('data-value', platform);
+    
+    const icon = document.createElement('img');
+    icon.src = platformLogos[platform] || '';
+    icon.style.width = '20px';
+    icon.style.height = '20px';
+    icon.style.filter = 'invert(1) brightness(2)';
+    icon.onerror = function() { this.style.display = 'none'; };
+    
+    const label = document.createElement('span');
+    label.innerText = platform;
+    
+    item.appendChild(checkbox);
+    item.appendChild(icon);
+    item.appendChild(label);
+    item.onclick = () => toggleMultiSelect(platform, 'editPlatforms');
+    
+    editPlatformsItems.appendChild(item);
+  });
 }
 
 function toggleDropdown(selectId) {
@@ -1659,7 +1730,30 @@ function toggleDropdown(selectId) {
 }
 
 function toggleMultiSelect(value, type) {
-  const array = type === 'tags' ? selectedTags : selectedPlatforms;
+  let array, displayId, itemsId, selectId;
+  
+  if (type === 'tags') {
+    array = selectedTags;
+    displayId = 'tagsDisplay';
+    itemsId = 'tagsItems';
+    selectId = 'tagsSelect';
+  } else if (type === 'platforms') {
+    array = selectedPlatforms;
+    displayId = 'platformsDisplay';
+    itemsId = 'platformsItems';
+    selectId = 'platformsSelect';
+  } else if (type === 'editTags') {
+    array = selectedEditTags;
+    displayId = 'editTagsDisplay';
+    itemsId = 'editTagsItems';
+    selectId = 'editTagsSelect';
+  } else if (type === 'editPlatforms') {
+    array = selectedEditPlatforms;
+    displayId = 'editPlatformsDisplay';
+    itemsId = 'editPlatformsItems';
+    selectId = 'editPlatformsSelect';
+  }
+  
   const idx = array.indexOf(value);
   
   if (idx > -1) {
@@ -1667,10 +1761,6 @@ function toggleMultiSelect(value, type) {
   } else {
     array.push(value);
   }
-  
-  const displayId = type === 'tags' ? 'tagsDisplay' : 'platformsDisplay';
-  const itemsId = type === 'tags' ? 'tagsItems' : 'platformsItems';
-  const selectId = type === 'tags' ? 'tagsSelect' : 'platformsSelect';
   
   updateDropdownDisplay(selectId, displayId, array);
   updateCheckboxes(itemsId, array);
