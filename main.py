@@ -429,8 +429,8 @@ class SharkCalendarApp:
         if forwarded_for:
             client_ip = forwarded_for.split(',')[0].strip()
         
-        # Log all login page accesses
-        if request.path == '/login':
+        # Log login page accesses only (exclude /health checks)
+        if request.path == '/login' or request.path.startswith('/login'):
             logger.info(f"🔐 Login page accessed from IP: {client_ip}")
         
         # Check if IP is blacklisted
@@ -1161,19 +1161,34 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
   position:relative; background:transparent; transition:all 0.2s; cursor:pointer;
   min-height:36px; display:flex; align-items:center; justify-content:center;
 }
-.mini-day:hover { background:rgba(0,229,255,0.1); }
+.mini-day:hover { 
+  background:rgba(0,229,255,0.2); 
+  transform:scale(1.1);
+  box-shadow: 0 0 10px rgba(0,229,255,0.3);
+}
 .mini-day.today { 
   background: linear-gradient(135deg, rgba(0,229,255,0.25), rgba(0,229,255,0.15)); 
   border:2px solid var(--neon); font-weight:700;
   box-shadow: 0 0 20px rgba(0,229,255,0.5);
 }
+.mini-day.today:hover {
+  background: linear-gradient(135deg, rgba(0,229,255,0.35), rgba(0,229,255,0.25));
+  box-shadow: 0 0 25px rgba(0,229,255,0.7);
+}
 .mini-day.has-events { 
   border:2px solid rgba(0,229,255,0.6);
   box-shadow: 0 0 12px rgba(0,229,255,0.4);
 }
+.mini-day.has-events:hover {
+  border-color:var(--neon);
+  box-shadow: 0 0 18px rgba(0,229,255,0.6);
+}
 .mini-day.today.has-events {
   border:3px solid var(--neon);
   box-shadow: 0 0 25px rgba(0,229,255,0.7);
+}
+.mini-day.today.has-events:hover {
+  box-shadow: 0 0 30px rgba(0,229,255,0.9);
 }
 
 /* Main Calendar View */
@@ -2029,6 +2044,11 @@ function renderMini() {
     if (dateStr === todayStr) cell.classList.add('today');
     if (hasEvents) cell.classList.add('has-events');
     cell.innerText = d;
+    
+    // Make clickable to add event
+    cell.onclick = () => {
+      openEventModalForDate(dateStr);
+    };
     
     mini.appendChild(cell);
   }
