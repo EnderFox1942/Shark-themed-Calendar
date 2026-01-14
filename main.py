@@ -421,6 +421,10 @@ class SharkCalendarApp:
     
     @web.middleware
     async def ip_blocking_middleware(self, request: web.Request, handler):
+        # Skip middleware entirely for health checks
+        if request.path == '/health':
+            return await handler(request)
+        
         # Get client IP
         client_ip = request.remote
         
@@ -429,7 +433,7 @@ class SharkCalendarApp:
         if forwarded_for:
             client_ip = forwarded_for.split(',')[0].strip()
         
-        # Log login page accesses only (exclude /health checks)
+        # Log login page accesses only
         if request.path == '/login' or request.path.startswith('/login'):
             logger.info(f"🔐 Login page accessed from IP: {client_ip}")
         
@@ -1470,8 +1474,104 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
   max-width:100%;
   border:2px solid rgba(0,229,255,0.3);
   border-radius:8px;
-  cursor:crosshair;
+  cursor:default;
+  display:block;
 }
+.crop-overlay {
+  position:absolute;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  pointer-events:none;
+}
+.crop-point {
+  position:absolute;
+  width:20px;
+  height:20px;
+  background:var(--neon);
+  border:3px solid var(--bg-dark);
+  border-radius:50%;
+  cursor:pointer;
+  pointer-events:all;
+  transform:translate(-50%, -50%);
+  box-shadow: 0 0 15px rgba(0,229,255,0.8), inset 0 0 5px rgba(255,255,255,0.5);
+  transition:all 0.2s;
+  z-index:20;
+}
+.crop-point:hover {
+  background:#00ff88;
+  box-shadow: 0 0 25px rgba(0,255,136,0.9), inset 0 0 8px rgba(255,255,255,0.7);
+  transform:translate(-50%, -50%) scale(1.3);
+}
+.crop-point:active {
+  background:#fff;
+  box-shadow: 0 0 30px rgba(255,255,255,1);
+}
+.crop-center {
+  position:absolute;
+  width:40px;
+  height:40px;
+  background:rgba(0,229,255,0.3);
+  border:2px solid var(--neon);
+  border-radius:50%;
+  cursor:move;
+  pointer-events:all;
+  transform:translate(-50%, -50%);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:20px;
+  transition:all 0.2s;
+  z-index:15;
+}
+.crop-center:hover {
+  background:rgba(0,229,255,0.5);
+  box-shadow: 0 0 20px rgba(0,229,255,0.6);
+  transform:translate(-50%, -50%) scale(1.1);
+}
+.crop-center:active {
+  background:rgba(0,229,255,0.7);
+  box-shadow: 0 0 30px rgba(0,229,255,0.9);
+}
+.crop-grid {
+  position:absolute;
+  pointer-events:none;
+  border:2px solid var(--neon);
+  box-shadow: 0 0 20px rgba(0,229,255,0.5), inset 0 0 30px rgba(0,229,255,0.1);
+  z-index:10;
+}
+.crop-grid::before,
+.crop-grid::after {
+  content:'';
+  position:absolute;
+  background:rgba(0,229,255,0.3);
+}
+.crop-grid::before {
+  width:1px;
+  height:100%;
+  left:33.33%;
+  top:0;
+  box-shadow: 0 0 5px rgba(0,229,255,0.5);
+}
+.crop-grid::after {
+  width:1px;
+  height:100%;
+  left:66.66%;
+  top:0;
+  box-shadow: 0 0 5px rgba(0,229,255,0.5);
+}
+.crop-grid-h1,
+.crop-grid-h2 {
+  position:absolute;
+  width:100%;
+  height:1px;
+  background:rgba(0,229,255,0.3);
+  box-shadow: 0 0 5px rgba(0,229,255,0.5);
+  left:0;
+}
+.crop-grid-h1 { top:33.33%; }
+.crop-grid-h2 { top:66.66%; }
 .crop-preview {
   margin-top:20px;
   text-align:center;
@@ -2569,6 +2669,13 @@ function closeProfilePicModal() {
   document.getElementById('profilePicInput').value = '';
   document.getElementById('cropperContainer').style.display = 'none';
   document.getElementById('uploadPicBtn').style.display = 'none';
+  
+  // Clean up overlay
+  const overlay = document.querySelector('.crop-overlay');
+  if (overlay) {
+    overlay.remove();
+  }
+  
   cropImage = null;
 }
 
@@ -2601,106 +2708,202 @@ function initCropper() {
   
   cropCtx.drawImage(cropImage, 0, 0, cropCanvas.width, cropCanvas.height);
   
-  const size = Math.min(cropCanvas.width, cropCanvas.height);
+  // Initialize crop area to center square
+  const size = Math.min(cropCanvas.width, cropCanvas.height) * 0.7;
   cropStartX = (cropCanvas.width - size) / 2;
   cropStartY = (cropCanvas.height - size) / 2;
   cropEndX = cropStartX + size;
   cropEndY = cropStartY + size;
   
-  drawCropOverlay();
-  updatePreview();
+  // Create overlay container
+  const container = document.getElementById('cropperContainer');
+  let overlay = container.querySelector('.crop-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'crop-overlay';
+    container.appendChild(overlay);
+  }
+  overlay.innerHTML = '';
   
-  cropCanvas.onmousedown = startCrop;
-  cropCanvas.onmousemove = updateCrop;
-  cropCanvas.onmouseup = endCrop;
-  cropCanvas.ontouchstart = handleTouchStart;
-  cropCanvas.ontouchmove = handleTouchMove;
-  cropCanvas.ontouchend = endCrop;
-}
-
-function startCrop(e) {
-  isCropping = true;
-  const rect = cropCanvas.getBoundingClientRect();
-  cropStartX = e.clientX - rect.left;
-  cropStartY = e.clientY - rect.top;
-}
-
-function updateCrop(e) {
-  if (!isCropping) return;
-  const rect = cropCanvas.getBoundingClientRect();
-  cropEndX = e.clientX - rect.left;
-  cropEndY = e.clientY - rect.top;
+  // Create crop grid
+  const grid = document.createElement('div');
+  grid.className = 'crop-grid';
+  const h1 = document.createElement('div');
+  h1.className = 'crop-grid-h1';
+  const h2 = document.createElement('div');
+  h2.className = 'crop-grid-h2';
+  grid.appendChild(h1);
+  grid.appendChild(h2);
+  overlay.appendChild(grid);
   
-  const size = Math.min(Math.abs(cropEndX - cropStartX), Math.abs(cropEndY - cropStartY));
-  cropEndX = cropStartX + (cropEndX > cropStartX ? size : -size);
-  cropEndY = cropStartY + (cropEndY > cropStartY ? size : -size);
+  // Create corner points
+  const points = ['tl', 'tr', 'bl', 'br'];
+  points.forEach(pos => {
+    const point = document.createElement('div');
+    point.className = 'crop-point';
+    point.dataset.position = pos;
+    overlay.appendChild(point);
+  });
   
-  drawCropOverlay();
-  updatePreview();
+  // Create center drag handle
+  const center = document.createElement('div');
+  center.className = 'crop-center';
+  center.innerHTML = '⊕';
+  center.dataset.position = 'center';
+  overlay.appendChild(center);
+  
+  updateCropUI();
+  
+  // Event handlers for points
+  overlay.querySelectorAll('.crop-point, .crop-center').forEach(el => {
+    el.addEventListener('mousedown', startDrag);
+    el.addEventListener('touchstart', startDrag);
+  });
+  
+  document.addEventListener('mousemove', drag);
+  document.addEventListener('touchmove', drag);
+  document.addEventListener('mouseup', endDrag);
+  document.addEventListener('touchend', endDrag);
 }
 
-function endCrop() {
-  isCropping = false;
-}
+let dragElement = null;
+let dragStartMouseX = 0;
+let dragStartMouseY = 0;
+let dragStartCropX1 = 0;
+let dragStartCropY1 = 0;
+let dragStartCropX2 = 0;
+let dragStartCropY2 = 0;
 
-function handleTouchStart(e) {
+function startDrag(e) {
   e.preventDefault();
-  const touch = e.touches[0];
+  dragElement = e.target;
+  
   const rect = cropCanvas.getBoundingClientRect();
-  cropStartX = touch.clientX - rect.left;
-  cropStartY = touch.clientY - rect.top;
-  isCropping = true;
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  
+  dragStartMouseX = clientX;
+  dragStartMouseY = clientY;
+  dragStartCropX1 = cropStartX;
+  dragStartCropY1 = cropStartY;
+  dragStartCropX2 = cropEndX;
+  dragStartCropY2 = cropEndY;
 }
 
-function handleTouchMove(e) {
-  if (!isCropping) return;
+function drag(e) {
+  if (!dragElement) return;
   e.preventDefault();
-  const touch = e.touches[0];
+  
   const rect = cropCanvas.getBoundingClientRect();
-  cropEndX = touch.clientX - rect.left;
-  cropEndY = touch.clientY - rect.top;
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
   
-  const size = Math.min(Math.abs(cropEndX - cropStartX), Math.abs(cropEndY - cropStartY));
-  cropEndX = cropStartX + (cropEndX > cropStartX ? size : -size);
-  cropEndY = cropStartY + (cropEndY > cropStartY ? size : -size);
+  const canvasX = (clientX - rect.left) * (cropCanvas.width / rect.width);
+  const canvasY = (clientY - rect.top) * (cropCanvas.height / rect.height);
   
-  drawCropOverlay();
-  updatePreview();
+  const deltaX = clientX - dragStartMouseX;
+  const deltaY = clientY - dragStartMouseY;
+  const canvasDeltaX = deltaX * (cropCanvas.width / rect.width);
+  const canvasDeltaY = deltaY * (cropCanvas.height / rect.height);
+  
+  const pos = dragElement.dataset.position;
+  const minSize = 50;
+  
+  if (pos === 'center') {
+    // Move entire crop area
+    const width = dragStartCropX2 - dragStartCropX1;
+    const height = dragStartCropY2 - dragStartCropY1;
+    
+    cropStartX = Math.max(0, Math.min(cropCanvas.width - width, dragStartCropX1 + canvasDeltaX));
+    cropStartY = Math.max(0, Math.min(cropCanvas.height - height, dragStartCropY1 + canvasDeltaY));
+    cropEndX = cropStartX + width;
+    cropEndY = cropStartY + height;
+  } else {
+    // Move corner point - keep square
+    if (pos === 'tl') {
+      const newX = Math.max(0, Math.min(dragStartCropX2 - minSize, dragStartCropX1 + canvasDeltaX));
+      const newY = Math.max(0, Math.min(dragStartCropY2 - minSize, dragStartCropY1 + canvasDeltaY));
+      const size = Math.min(dragStartCropX2 - newX, dragStartCropY2 - newY);
+      cropStartX = dragStartCropX2 - size;
+      cropStartY = dragStartCropY2 - size;
+    } else if (pos === 'tr') {
+      const newX = Math.min(cropCanvas.width, Math.max(dragStartCropX1 + minSize, dragStartCropX2 + canvasDeltaX));
+      const newY = Math.max(0, Math.min(dragStartCropY2 - minSize, dragStartCropY1 + canvasDeltaY));
+      const size = Math.min(newX - dragStartCropX1, dragStartCropY2 - newY);
+      cropEndX = dragStartCropX1 + size;
+      cropStartY = dragStartCropY2 - size;
+    } else if (pos === 'bl') {
+      const newX = Math.max(0, Math.min(dragStartCropX2 - minSize, dragStartCropX1 + canvasDeltaX));
+      const newY = Math.min(cropCanvas.height, Math.max(dragStartCropY1 + minSize, dragStartCropY2 + canvasDeltaY));
+      const size = Math.min(dragStartCropX2 - newX, newY - dragStartCropY1);
+      cropStartX = dragStartCropX2 - size;
+      cropEndY = dragStartCropY1 + size;
+    } else if (pos === 'br') {
+      const newX = Math.min(cropCanvas.width, Math.max(dragStartCropX1 + minSize, dragStartCropX2 + canvasDeltaX));
+      const newY = Math.min(cropCanvas.height, Math.max(dragStartCropY1 + minSize, dragStartCropY2 + canvasDeltaY));
+      const size = Math.min(newX - dragStartCropX1, newY - dragStartCropY1);
+      cropEndX = dragStartCropX1 + size;
+      cropEndY = dragStartCropY1 + size;
+    }
+  }
+  
+  updateCropUI();
 }
 
-function drawCropOverlay() {
-  cropCtx.clearRect(0, 0, cropCanvas.width, cropCanvas.height);
-  cropCtx.drawImage(cropImage, 0, 0, cropCanvas.width, cropCanvas.height);
+function endDrag() {
+  dragElement = null;
+}
+
+function updateCropUI() {
+  const rect = cropCanvas.getBoundingClientRect();
+  const scaleX = rect.width / cropCanvas.width;
+  const scaleY = rect.height / cropCanvas.height;
   
-  cropCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-  cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+  const overlay = document.querySelector('.crop-overlay');
+  const grid = overlay.querySelector('.crop-grid');
+  const points = overlay.querySelectorAll('.crop-point');
+  const center = overlay.querySelector('.crop-center');
   
-  const x = Math.min(cropStartX, cropEndX);
-  const y = Math.min(cropStartY, cropEndY);
-  const w = Math.abs(cropEndX - cropStartX);
-  const h = Math.abs(cropEndY - cropStartY);
+  // Update grid position
+  grid.style.left = (cropStartX * scaleX) + 'px';
+  grid.style.top = (cropStartY * scaleY) + 'px';
+  grid.style.width = ((cropEndX - cropStartX) * scaleX) + 'px';
+  grid.style.height = ((cropEndY - cropStartY) * scaleY) + 'px';
   
-  cropCtx.clearRect(x, y, w, h);
-  cropCtx.drawImage(cropImage, 0, 0, cropCanvas.width, cropCanvas.height);
-  cropCtx.strokeStyle = '#00e5ff';
-  cropCtx.lineWidth = 2;
-  cropCtx.strokeRect(x, y, w, h);
+  // Update corner points
+  const positions = {
+    'tl': [cropStartX, cropStartY],
+    'tr': [cropEndX, cropStartY],
+    'bl': [cropStartX, cropEndY],
+    'br': [cropEndX, cropEndY]
+  };
+  
+  points.forEach(point => {
+    const pos = point.dataset.position;
+    const [x, y] = positions[pos];
+    point.style.left = (x * scaleX) + 'px';
+    point.style.top = (y * scaleY) + 'px';
+  });
+  
+  // Update center handle
+  const centerX = (cropStartX + cropEndX) / 2;
+  const centerY = (cropStartY + cropEndY) / 2;
+  center.style.left = (centerX * scaleX) + 'px';
+  center.style.top = (centerY * scaleY) + 'px';
+  
+  // Update preview
+  updatePreview();
 }
 
 function updatePreview() {
   const previewCanvas = document.getElementById('previewCanvas');
   const previewCtx = previewCanvas.getContext('2d');
   
-  const x = Math.min(cropStartX, cropEndX);
-  const y = Math.min(cropStartY, cropEndY);
-  const w = Math.abs(cropEndX - cropStartX);
-  const h = Math.abs(cropEndY - cropStartY);
-  
   const scale = cropCanvas.width / cropImage.width;
-  const srcX = x / scale;
-  const srcY = y / scale;
-  const srcW = w / scale;
-  const srcH = h / scale;
+  const srcX = cropStartX / scale;
+  const srcY = cropStartY / scale;
+  const srcW = (cropEndX - cropStartX) / scale;
+  const srcH = (cropEndY - cropStartY) / scale;
   
   previewCtx.clearRect(0, 0, 150, 150);
   previewCtx.drawImage(cropImage, srcX, srcY, srcW, srcH, 0, 0, 150, 150);
