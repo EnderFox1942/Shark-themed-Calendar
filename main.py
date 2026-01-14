@@ -714,6 +714,114 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
   .brand .title h1 { font-size:1.5em; }
 }
 
+/* Desktop/Mobile View Toggle */
+.desktop-only { display:block; }
+.mobile-only { display:none; }
+
+@media (max-width:900px){
+  .desktop-only { display:none; }
+  .mobile-only { display:block; }
+}
+
+/* Mobile List View */
+.mobile-list-view {
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+
+.mobile-date-group {
+  background:rgba(0,26,51,0.6);
+  border-radius:10px;
+  padding:12px;
+  border:1px solid rgba(0,229,255,0.08);
+}
+
+.mobile-date-header {
+  font-weight:700;
+  color:var(--neon);
+  font-size:14px;
+  margin-bottom:12px;
+  padding-bottom:8px;
+  border-bottom:1px solid rgba(0,229,255,0.2);
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+
+.mobile-date-header.today {
+  color:#00ff88;
+  text-shadow: 0 0 10px rgba(0,255,136,0.5);
+}
+
+.mobile-event-list {
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.mobile-event-item {
+  background: linear-gradient(135deg, rgba(0,229,255,0.12), rgba(0,100,140,0.1));
+  border-radius:8px;
+  padding:10px;
+  border:1px solid rgba(0,229,255,0.15);
+  cursor:pointer;
+  transition:all 0.2s;
+}
+
+.mobile-event-item:hover {
+  background: linear-gradient(135deg, rgba(0,229,255,0.22), rgba(0,100,140,0.18));
+  border-color:rgba(0,229,255,0.4);
+  transform:translateX(4px);
+}
+
+.mobile-event-title {
+  font-weight:700;
+  color:var(--text);
+  font-size:14px;
+  margin-bottom:6px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+}
+
+.mobile-event-platforms {
+  display:flex;
+  gap:4px;
+  margin-right:8px;
+}
+
+.mobile-event-description {
+  color:rgba(232,244,248,0.7);
+  font-size:12px;
+  margin-top:4px;
+  line-height:1.4;
+}
+
+.mobile-event-tags {
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+  margin-top:8px;
+}
+
+.mobile-tag-badge {
+  background:rgba(0,229,255,0.15);
+  border:1px solid rgba(0,229,255,0.3);
+  padding:3px 8px;
+  border-radius:4px;
+  font-size:10px;
+  color:var(--neon);
+}
+
+.mobile-no-events {
+  text-align:center;
+  padding:40px 20px;
+  color:rgba(232,244,248,0.5);
+  font-style:italic;
+}
+
 /* Mini Calendar in Sidebar */
 .mini { background:rgba(10,20,41,0.97); border-radius:10px; padding:12px; border:1px solid rgba(0,229,255,0.08); }
 .month-nav { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; }
@@ -758,12 +866,16 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
   border-radius:6px; letter-spacing:1px;
 }
 .cal-day { 
-  min-height:90px; background:rgba(0,26,51,0.6); border-radius:8px; 
+  min-height:90px; 
+  max-height:90px;
+  background:rgba(0,26,51,0.6); border-radius:8px; 
   padding:8px 6px; position:relative; border:1px solid rgba(0,229,255,0.08);
   transition:all 0.2s; cursor:pointer;
+  overflow-y:auto;
+  overflow-x:hidden;
 }
 @media (max-width:600px){ 
-  .cal-day { min-height:70px; padding:6px 4px; }
+  .cal-day { min-height:70px; max-height:70px; padding:6px 4px; }
 }
 .cal-day:hover { 
   border-color:rgba(0,229,255,0.3); 
@@ -796,15 +908,20 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
   border:1px solid rgba(0,229,255,0.15); 
   display:flex; align-items:center; gap:6px;
   transition:all 0.2s;
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  overflow:visible;
+  white-space:normal;
+  word-wrap:break-word;
+  line-height:1.3;
+  min-height:22px;
 }
 .event-item:hover {
   background: linear-gradient(135deg, rgba(0,229,255,0.22), rgba(0,100,140,0.18));
   border-color:rgba(0,229,255,0.4);
   transform:translateY(-1px);
+  z-index:10;
 }
 @media (max-width:600px){ 
-  .event-item { font-size:10px; padding:3px 4px; }
+  .event-item { font-size:10px; padding:3px 4px; min-height:20px; }
 }
 .platform-icon { width:16px; height:16px; flex-shrink:0; }
 @media (max-width:600px){ 
@@ -1080,17 +1197,15 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
       <div class="month-title" id="mainMonthTitle">Loading...</div>
     </div>
-    <div class="calendar-view">
-      <div class="calendar-grid">
-        <div class="cal-header">MON</div>
-        <div class="cal-header">TUE</div>
-        <div class="cal-header">WED</div>
-        <div class="cal-header">THU</div>
-        <div class="cal-header">FRI</div>
-        <div class="cal-header">SAT</div>
-        <div class="cal-header">SUN</div>
-      </div>
+    
+    <!-- Desktop Calendar View -->
+    <div class="calendar-view desktop-only">
       <div class="calendar-grid" id="calendarGrid" style="margin-top:8px;"></div>
+    </div>
+    
+    <!-- Mobile List View -->
+    <div class="mobile-list-view mobile-only" id="mobileListView">
+      <!-- Events will be rendered here on mobile -->
     </div>
   </div>
 </div>
@@ -1250,6 +1365,96 @@ let isCropping = false;
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 900;
 console.log('Device detected:', isMobile ? 'Mobile' : 'Desktop');
 
+// Notification System
+async function requestNotificationPermission() {
+  if (!('Notification' in window)) {
+    console.log('This browser does not support notifications');
+    return;
+  }
+  
+  if (Notification.permission === 'granted') {
+    console.log('Notification permission already granted');
+    return;
+  }
+  
+  if (Notification.permission !== 'denied') {
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      console.log('Notification permission granted');
+      new Notification('🦈 APEX Calendar', {
+        body: 'Notifications enabled! You\'ll be reminded of upcoming events.',
+        icon: '/favicon.ico',
+        badge: '/favicon.ico'
+      });
+    }
+  }
+}
+
+function scheduleNotifications() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') {
+    return;
+  }
+  
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  
+  eventsData.forEach(event => {
+    const eventDate = new Date(event.event_date + 'T00:00:00');
+    const eventDateOnly = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+    
+    // Check if event is today
+    if (eventDateOnly.getTime() === today.getTime()) {
+      const notifyTime = new Date(now);
+      notifyTime.setHours(8, 0, 0, 0); // 8 AM notification
+      
+      if (now < notifyTime) {
+        const timeUntil = notifyTime.getTime() - now.getTime();
+        setTimeout(() => {
+          showEventNotification(event, 'Today');
+        }, timeUntil);
+      }
+    }
+    
+    // Check if event is tomorrow
+    if (eventDateOnly.getTime() === tomorrow.getTime()) {
+      const notifyTime = new Date(now);
+      notifyTime.setHours(20, 0, 0, 0); // 8 PM notification for tomorrow
+      
+      if (now < notifyTime) {
+        const timeUntil = notifyTime.getTime() - now.getTime();
+        setTimeout(() => {
+          showEventNotification(event, 'Tomorrow');
+        }, timeUntil);
+      }
+    }
+  });
+}
+
+function showEventNotification(event, timing) {
+  if (Notification.permission !== 'granted') return;
+  
+  let body = `${timing}: ${event.title}`;
+  if (event.description) {
+    body += `\n${event.description}`;
+  }
+  
+  const notification = new Notification(`🦈 ${timing}'s Event`, {
+    body: body,
+    icon: '/favicon.ico',
+    badge: '/favicon.ico',
+    tag: `event-${event.id}`,
+    requireInteraction: false
+  });
+  
+  notification.onclick = function() {
+    window.focus();
+    showEventDetails(event);
+    notification.close();
+  };
+}
+
 // Initialize
 async function init() {
   console.log('=== INIT STARTED ===');
@@ -1268,6 +1473,8 @@ async function init() {
   
   initDropdowns();
   await loadEvents();
+  await requestNotificationPermission();
+  scheduleNotifications();
   console.log('=== INIT COMPLETED ===');
 }
 
@@ -1313,6 +1520,9 @@ async function loadEvents() {
     renderCalendar();
     console.log('Calling renderMini...');
     renderMini();
+    console.log('Calling renderMobileList...');
+    renderMobileList();
+    scheduleNotifications();
     console.log('=== loadEvents completed successfully ===');
   } catch (e) {
     console.error('ERROR in loadEvents:', e);
@@ -1321,6 +1531,7 @@ async function loadEvents() {
     eventsData = [];
     renderCalendar();
     renderMini();
+    renderMobileList();
   }
 }
 
@@ -1406,17 +1617,32 @@ function renderCalendar() {
       const eventItem = document.createElement('div');
       eventItem.className = 'event-item';
       
-      if (ev.platforms && ev.platforms.length > 0 && platformLogos[ev.platforms[0]]) {
-        const icon = document.createElement('img');
-        icon.src = platformLogos[ev.platforms[0]];
-        icon.className = 'platform-icon';
-        icon.style.filter = 'invert(1) brightness(2)';
-        eventItem.appendChild(icon);
+      // Add all platform icons if available
+      if (ev.platforms && ev.platforms.length > 0) {
+        const iconsContainer = document.createElement('div');
+        iconsContainer.style.display = 'flex';
+        iconsContainer.style.gap = '4px';
+        iconsContainer.style.alignItems = 'center';
+        iconsContainer.style.flexShrink = '0';
+        
+        ev.platforms.forEach(platform => {
+          if (platformLogos[platform]) {
+            const icon = document.createElement('img');
+            icon.src = platformLogos[platform];
+            icon.className = 'platform-icon';
+            icon.style.filter = 'invert(1) brightness(2)';
+            iconsContainer.appendChild(icon);
+          }
+        });
+        
+        if (iconsContainer.children.length > 0) {
+          eventItem.appendChild(iconsContainer);
+        }
       }
       
       const title = document.createElement('span');
-      const maxLen = isMobile ? 12 : 20;
-      title.innerText = ev.title.length > maxLen ? ev.title.slice(0,maxLen-1)+'…' : ev.title;
+      title.innerText = ev.title;
+      title.style.flex = '1';
       eventItem.appendChild(title);
       
       eventItem.onclick = (e) => {
@@ -1480,6 +1706,154 @@ function renderMini() {
     mini.appendChild(cell);
   }
   console.log('Mini calendar rendered successfully');
+}
+
+function renderMobileList() {
+  console.log('renderMobileList called');
+  
+  if (!isMobile) {
+    console.log('Not mobile, skipping mobile list render');
+    return;
+  }
+  
+  const container = document.getElementById('mobileListView');
+  if (!container) {
+    console.error('mobileListView element not found!');
+    return;
+  }
+  
+  container.innerHTML = '';
+  
+  // Filter events for current month
+  const monthEvents = eventsData.filter(ev => {
+    const evDate = new Date(ev.event_date + 'T00:00:00');
+    return evDate.getMonth() + 1 === currentMonth && evDate.getFullYear() === currentYear;
+  });
+  
+  if (monthEvents.length === 0) {
+    const noEvents = document.createElement('div');
+    noEvents.className = 'mobile-no-events';
+    noEvents.innerText = '🦈 No events this month';
+    container.appendChild(noEvents);
+    return;
+  }
+  
+  // Group events by date
+  const eventsByDate = {};
+  monthEvents.forEach(ev => {
+    if (!eventsByDate[ev.event_date]) {
+      eventsByDate[ev.event_date] = [];
+    }
+    eventsByDate[ev.event_date].push(ev);
+  });
+  
+  // Sort dates
+  const sortedDates = Object.keys(eventsByDate).sort();
+  
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  
+  // Render each date group
+  sortedDates.forEach(dateStr => {
+    const dateGroup = document.createElement('div');
+    dateGroup.className = 'mobile-date-group';
+    
+    // Date header
+    const dateHeader = document.createElement('div');
+    dateHeader.className = 'mobile-date-header';
+    if (dateStr === todayStr) {
+      dateHeader.classList.add('today');
+    }
+    
+    const date = new Date(dateStr + 'T00:00:00');
+    const formatted = date.toLocaleDateString('en-US', { 
+      weekday: 'short', 
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    });
+    
+    if (dateStr === todayStr) {
+      dateHeader.innerHTML = `<span>📍</span><span>${formatted} (Today)</span>`;
+    } else {
+      dateHeader.innerText = formatted;
+    }
+    
+    dateGroup.appendChild(dateHeader);
+    
+    // Event list for this date
+    const eventList = document.createElement('div');
+    eventList.className = 'mobile-event-list';
+    
+    eventsByDate[dateStr].forEach(ev => {
+      const eventItem = document.createElement('div');
+      eventItem.className = 'mobile-event-item';
+      
+      // Title row with platforms
+      const titleRow = document.createElement('div');
+      titleRow.className = 'mobile-event-title';
+      
+      // Platform icons
+      if (ev.platforms && ev.platforms.length > 0) {
+        const platformsContainer = document.createElement('div');
+        platformsContainer.className = 'mobile-event-platforms';
+        
+        ev.platforms.forEach(platform => {
+          if (platformLogos[platform]) {
+            const icon = document.createElement('img');
+            icon.src = platformLogos[platform];
+            icon.style.width = '18px';
+            icon.style.height = '18px';
+            icon.style.filter = 'invert(1) brightness(2)';
+            platformsContainer.appendChild(icon);
+          }
+        });
+        
+        titleRow.appendChild(platformsContainer);
+      }
+      
+      // Title text
+      const titleText = document.createElement('span');
+      titleText.innerText = ev.title;
+      titleText.style.flex = '1';
+      titleRow.appendChild(titleText);
+      
+      eventItem.appendChild(titleRow);
+      
+      // Description
+      if (ev.description) {
+        const desc = document.createElement('div');
+        desc.className = 'mobile-event-description';
+        desc.innerText = ev.description;
+        eventItem.appendChild(desc);
+      }
+      
+      // Tags
+      if (ev.tags && ev.tags.length > 0) {
+        const tagsContainer = document.createElement('div');
+        tagsContainer.className = 'mobile-event-tags';
+        
+        ev.tags.forEach(tag => {
+          const tagBadge = document.createElement('div');
+          tagBadge.className = 'mobile-tag-badge';
+          tagBadge.innerText = tag;
+          tagsContainer.appendChild(tagBadge);
+        });
+        
+        eventItem.appendChild(tagsContainer);
+      }
+      
+      // Click to show details
+      eventItem.onclick = () => showEventDetails(ev);
+      
+      eventList.appendChild(eventItem);
+    });
+    
+    dateGroup.appendChild(eventList);
+    container.appendChild(dateGroup);
+  });
+  
+  console.log('Mobile list rendered successfully');
 }
 
 function showEventDetails(ev) {
