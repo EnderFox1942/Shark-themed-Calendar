@@ -1774,12 +1774,29 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
   word-wrap:break-word;
   line-height:1.3;
   min-height:22px;
+  position:relative;
+}
+.event-item.repeat-occurrence {
+  border-left:3px solid rgba(255,165,0,0.6);
+  background: linear-gradient(135deg, rgba(255,165,0,0.12), rgba(255,140,0,0.1));
+}
+.event-item.repeat-occurrence::after {
+  content:'🔄';
+  position:absolute;
+  right:4px;
+  top:2px;
+  font-size:10px;
+  opacity:0.6;
 }
 .event-item:hover {
   background: linear-gradient(135deg, rgba(0,229,255,0.22), rgba(0,100,140,0.18));
   border-color:rgba(0,229,255,0.4);
   transform:translateY(-1px);
   z-index:10;
+}
+.event-item.repeat-occurrence:hover {
+  background: linear-gradient(135deg, rgba(255,165,0,0.22), rgba(255,140,0,0.18));
+  border-color:rgba(255,165,0,0.6);
 }
 @media (max-width:600px){ 
   .event-item { font-size:10px; padding:3px 4px; min-height:20px; }
@@ -2260,6 +2277,13 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
   <div class="modal-content">
     <div class="modal-header" id="detailsEventTitle">Event Details</div>
     
+    <div id="repeatOccurrenceNotice" style="display:none;background:rgba(255,165,0,0.15);border:1px solid rgba(255,165,0,0.5);border-radius:6px;padding:12px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:8px;color:#ffa500;font-size:12px;">
+        <span style="font-size:16px;">🔄</span>
+        <span><strong>Repeated Event:</strong> This is an occurrence of a repeating event. Edit the original event to modify all occurrences.</span>
+      </div>
+    </div>
+    
     <div class="form-group">
       <label class="form-label">Event Title</label>
       <input type="text" class="form-input" id="editEventTitle" placeholder="Event title">
@@ -2601,6 +2625,11 @@ async function loadEvents() {
   try {
     eventsData = await fetchEvents();
     console.log('Events data stored:', eventsData.length, 'events');
+    
+    // Expand repeated events
+    eventsData = expandRepeatedEvents(eventsData);
+    console.log('After expanding repeats:', eventsData.length, 'events');
+    
     console.log('Calling renderCalendar...');
     renderCalendar();
     console.log('Calling renderMini...');
@@ -2618,6 +2647,60 @@ async function loadEvents() {
     renderMini();
     renderMobileList();
   }
+}
+
+function expandRepeatedEvents(events) {
+  const expanded = [];
+  const today = new Date();
+  const maxDate = new Date(today.getFullYear() + 5, 11, 31); // 5 years into future
+  
+  events.forEach(event => {
+    // Always add the original event
+    expanded.push(event);
+    
+    // If repeat is enabled, generate future occurrences
+    if (event.repeat_enabled && event.repeat_interval) {
+      const originalDate = new Date(event.event_date + 'T00:00:00');
+      let currentDate = new Date(originalDate);
+      
+      // Generate occurrences up to 5 years in the future
+      while (currentDate < maxDate) {
+        // Calculate next occurrence based on interval
+        switch (event.repeat_interval) {
+          case 'daily':
+            currentDate.setDate(currentDate.getDate() + 1);
+            break;
+          case 'weekly':
+            currentDate.setDate(currentDate.getDate() + 7);
+            break;
+          case 'monthly':
+            currentDate.setMonth(currentDate.getMonth() + 1);
+            break;
+          case 'yearly':
+            currentDate.setFullYear(currentDate.getFullYear() + 1);
+            break;
+          default:
+            currentDate = maxDate; // Stop if unknown interval
+        }
+        
+        // Don't create occurrences past max date
+        if (currentDate >= maxDate) break;
+        
+        // Create a virtual event for this occurrence
+        const virtualEvent = {
+          ...event,
+          id: `${event.id}_repeat_${currentDate.getTime()}`, // Unique virtual ID
+          event_date: currentDate.toISOString().split('T')[0],
+          is_repeat_occurrence: true,
+          original_event_id: event.id
+        };
+        
+        expanded.push(virtualEvent);
+      }
+    }
+  });
+  
+  return expanded;
 }
 
 function renderCalendar() {
@@ -2701,6 +2784,11 @@ function renderCalendar() {
     displayEvents.forEach(ev => {
       const eventItem = document.createElement('div');
       eventItem.className = 'event-item';
+      
+      // Mark as repeat occurrence
+      if (ev.is_repeat_occurrence) {
+        eventItem.classList.add('repeat-occurrence');
+      }
       
       // Add all platform icons if available
       if (ev.platforms && ev.platforms.length > 0) {
@@ -2879,6 +2967,11 @@ function renderMobileList() {
       const eventItem = document.createElement('div');
       eventItem.className = 'mobile-event-item';
       
+      // Add repeat indicator if it's a repeat occurrence
+      if (ev.is_repeat_occurrence) {
+        eventItem.style.borderLeft = '4px solid rgba(255,165,0,0.8)';
+      }
+      
       // Title row with platforms
       const titleRow = document.createElement('div');
       titleRow.className = 'mobile-event-title';
@@ -2907,6 +3000,15 @@ function renderMobileList() {
       titleText.innerText = ev.title;
       titleText.style.flex = '1';
       titleRow.appendChild(titleText);
+      
+      // Add repeat icon if it's a repeat occurrence
+      if (ev.is_repeat_occurrence) {
+        const repeatIcon = document.createElement('span');
+        repeatIcon.innerText = '🔄';
+        repeatIcon.style.fontSize = '14px';
+        repeatIcon.style.opacity = '0.7';
+        titleRow.appendChild(repeatIcon);
+      }
       
       eventItem.appendChild(titleRow);
       
@@ -2948,6 +3050,14 @@ function renderMobileList() {
 
 function showEventDetails(ev) {
   currentEventDetails = ev;
+  
+  // Show/hide repeat occurrence notice
+  const repeatNotice = document.getElementById('repeatOccurrenceNotice');
+  if (ev.is_repeat_occurrence) {
+    repeatNotice.style.display = 'block';
+  } else {
+    repeatNotice.style.display = 'none';
+  }
   
   // Populate edit fields
   document.getElementById('detailsEventTitle').innerText = ev.title;
@@ -2997,6 +3107,12 @@ function closeEventDetailsModal() {
 async function saveEventChanges() {
   if (!currentEventDetails) return;
   
+  // If this is a repeat occurrence, redirect to original event
+  if (currentEventDetails.is_repeat_occurrence) {
+    alert('This is a repeated event occurrence. To edit, modify the original event and its repeat settings.');
+    return;
+  }
+  
   const notifyEnabled = document.getElementById('editNotifyYes').checked;
   const repeatEnabled = document.getElementById('editRepeatYes').checked;
   
@@ -3035,6 +3151,12 @@ async function saveEventChanges() {
 
 async function deleteCurrentEvent() {
   if (!currentEventDetails) return;
+  
+  // Check if this is a repeat occurrence
+  if (currentEventDetails.is_repeat_occurrence) {
+    alert('This is a repeated event occurrence. To delete all occurrences, edit the original event and turn off repeating.');
+    return;
+  }
   
   if (!confirm(`Are you sure you want to delete "${currentEventDetails.title}"?`)) {
     return;
