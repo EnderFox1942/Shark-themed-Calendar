@@ -138,8 +138,13 @@ CREATE TABLE IF NOT EXISTS shark_events (
     description TEXT,
     event_date DATE NOT NULL,
     event_time TIME,
+    location TEXT,
     tags TEXT DEFAULT '[]',
     platforms TEXT DEFAULT '[]',
+    notify_enabled BOOLEAN DEFAULT FALSE,
+    notify_days_before INTEGER DEFAULT 0,
+    repeat_enabled BOOLEAN DEFAULT FALSE,
+    repeat_interval TEXT DEFAULT NULL,
     username TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT NOW()
 );
@@ -192,7 +197,12 @@ USING (true);
 
     async def create_event(self, title: str, description: str,
                           event_date: str, event_time: Optional[str],
-                          tags, platforms, username: str) -> Dict:
+                          tags, platforms, username: str,
+                          location: Optional[str] = None,
+                          notify_enabled: bool = False,
+                          notify_days_before: int = 0,
+                          repeat_enabled: bool = False,
+                          repeat_interval: Optional[str] = None) -> Dict:
         logger.info(f"📝 Creating event: '{title}' for user '{username}'")
         tags_json = await self._normalize_list_field(tags)
         platforms_json = await self._normalize_list_field(platforms)
@@ -201,8 +211,13 @@ USING (true);
             "description": description,
             "event_date": event_date,
             "event_time": event_time or None,
+            "location": location,
             "tags": tags_json,
             "platforms": platforms_json,
+            "notify_enabled": notify_enabled,
+            "notify_days_before": notify_days_before,
+            "repeat_enabled": repeat_enabled,
+            "repeat_interval": repeat_interval,
             "username": username,
             "created_at": datetime.now().isoformat()
         }
@@ -445,10 +460,20 @@ class SharkCalendarApp:
         try:
             return await handler(request)
         except web.HTTPException as ex:
-            if ex.status == 404:
-                return await self.error_404(request)
+            if ex.status == 400:
+                return await self.error_400(request)
+            elif ex.status == 401:
+                return await self.error_401(request)
             elif ex.status == 403:
                 return await self.error_403(request)
+            elif ex.status == 404:
+                return await self.error_404(request)
+            elif ex.status == 500:
+                return await self.error_500(request)
+            elif ex.status == 502:
+                return await self.error_502(request)
+            elif ex.status == 503:
+                return await self.error_503(request)
             raise
 
     async def health_check(self, request: web.Request):
@@ -751,6 +776,481 @@ class SharkCalendarApp:
 </body>
 </html>'''
         return web.Response(text=html, content_type='text/html', status=403)
+    
+    async def error_400(self, request: web.Request):
+        """Custom 400 Bad Request page"""
+        html = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🦈 400 - Bad Request</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Space Mono', monospace;
+            background: linear-gradient(180deg, #332200 0%, #664400 50%, #996600 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            overflow: hidden;
+            position: relative;
+        }
+        .error-container {
+            background: rgba(51, 34, 0, 0.85);
+            backdrop-filter: blur(20px);
+            border: 2px solid rgba(255, 165, 0, 0.5);
+            border-radius: 16px;
+            padding: 60px 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 0 60px rgba(255, 165, 0, 0.3);
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+        .shark-logo { font-size: 120px; margin-bottom: 20px; filter: grayscale(0.3); }
+        .error-code {
+            font-family: 'Bebas Neue', cursive;
+            color: #ffa500;
+            font-size: 6em;
+            letter-spacing: 12px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px rgba(255, 165, 0, 0.8);
+        }
+        .error-title {
+            font-family: 'Bebas Neue', cursive;
+            color: #ffa500;
+            font-size: 2em;
+            letter-spacing: 4px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+        }
+        .error-message {
+            color: #f8e8d7;
+            font-size: 1.1em;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .btn-home {
+            display: inline-block;
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #996600 0%, #664400 100%);
+            color: #f8e8d7;
+            border: 2px solid #ffa500;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Space Mono', monospace;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.3s;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .btn-home:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(255, 165, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="shark-logo">🦈</div>
+        <div class="error-code">400</div>
+        <div class="error-title">Bad Request</div>
+        <div class="error-message">
+            Something's fishy with your request...<br>
+            The shark couldn't understand what you asked for.
+        </div>
+        <a href="/" class="btn-home">Return Home</a>
+    </div>
+</body>
+</html>'''
+        return web.Response(text=html, content_type='text/html', status=400)
+    
+    async def error_401(self, request: web.Request):
+        """Custom 401 Unauthorized page"""
+        html = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🦈 401 - Unauthorized</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Space Mono', monospace;
+            background: linear-gradient(180deg, #1a1a00 0%, #333300 50%, #4d4d00 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .error-container {
+            background: rgba(26, 26, 0, 0.85);
+            backdrop-filter: blur(20px);
+            border: 2px solid rgba(255, 255, 0, 0.5);
+            border-radius: 16px;
+            padding: 60px 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 0 60px rgba(255, 255, 0, 0.3);
+            text-align: center;
+        }
+        .shark-logo { font-size: 120px; margin-bottom: 20px; }
+        .error-code {
+            font-family: 'Bebas Neue', cursive;
+            color: #ffff00;
+            font-size: 6em;
+            letter-spacing: 12px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px rgba(255, 255, 0, 0.8);
+        }
+        .error-title {
+            font-family: 'Bebas Neue', cursive;
+            color: #ffff00;
+            font-size: 2em;
+            letter-spacing: 4px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+        }
+        .error-message {
+            color: #f8f8d7;
+            font-size: 1.1em;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .btn-home {
+            display: inline-block;
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #4d4d00 0%, #333300 100%);
+            color: #f8f8d7;
+            border: 2px solid #ffff00;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Space Mono', monospace;
+            text-decoration: none;
+            transition: all 0.3s;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .btn-home:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(255, 255, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="shark-logo">🦈</div>
+        <div class="error-code">401</div>
+        <div class="error-title">Unauthorized</div>
+        <div class="error-message">
+            You need credentials to swim in these waters.<br>
+            Please login to continue.
+        </div>
+        <a href="/login" class="btn-home">Go to Login</a>
+    </div>
+</body>
+</html>'''
+        return web.Response(text=html, content_type='text/html', status=401)
+    
+    async def error_500(self, request: web.Request):
+        """Custom 500 Internal Server Error page"""
+        html = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🦈 500 - Server Error</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Space Mono', monospace;
+            background: linear-gradient(180deg, #330033 0%, #660066 50%, #990099 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .error-container {
+            background: rgba(51, 0, 51, 0.85);
+            backdrop-filter: blur(20px);
+            border: 2px solid rgba(255, 0, 255, 0.5);
+            border-radius: 16px;
+            padding: 60px 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 0 60px rgba(255, 0, 255, 0.3);
+            text-align: center;
+        }
+        .shark-logo { 
+            font-size: 120px; 
+            margin-bottom: 20px;
+            animation: glitch 1s infinite;
+        }
+        @keyframes glitch {
+            0%, 100% { transform: translate(0); }
+            20% { transform: translate(-2px, 2px); }
+            40% { transform: translate(2px, -2px); }
+            60% { transform: translate(-2px, -2px); }
+            80% { transform: translate(2px, 2px); }
+        }
+        .error-code {
+            font-family: 'Bebas Neue', cursive;
+            color: #ff00ff;
+            font-size: 6em;
+            letter-spacing: 12px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px rgba(255, 0, 255, 0.8);
+        }
+        .error-title {
+            font-family: 'Bebas Neue', cursive;
+            color: #ff00ff;
+            font-size: 2em;
+            letter-spacing: 4px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+        }
+        .error-message {
+            color: #f8d7f8;
+            font-size: 1.1em;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .btn-home {
+            display: inline-block;
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #990099 0%, #660066 100%);
+            color: #f8d7f8;
+            border: 2px solid #ff00ff;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Space Mono', monospace;
+            text-decoration: none;
+            transition: all 0.3s;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .btn-home:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(255, 0, 255, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="shark-logo">🦈</div>
+        <div class="error-code">500</div>
+        <div class="error-title">Server Error</div>
+        <div class="error-message">
+            The shark hit something underwater!<br>
+            Our servers encountered an unexpected error.
+        </div>
+        <a href="/" class="btn-home">Try Again</a>
+    </div>
+</body>
+</html>'''
+        return web.Response(text=html, content_type='text/html', status=500)
+    
+    async def error_502(self, request: web.Request):
+        """Custom 502 Bad Gateway page"""
+        html = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🦈 502 - Bad Gateway</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Space Mono', monospace;
+            background: linear-gradient(180deg, #003333 0%, #006666 50%, #009999 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .error-container {
+            background: rgba(0, 51, 51, 0.85);
+            backdrop-filter: blur(20px);
+            border: 2px solid rgba(0, 255, 255, 0.5);
+            border-radius: 16px;
+            padding: 60px 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 0 60px rgba(0, 255, 255, 0.3);
+            text-align: center;
+        }
+        .shark-logo { font-size: 120px; margin-bottom: 20px; }
+        .error-code {
+            font-family: 'Bebas Neue', cursive;
+            color: #00ffff;
+            font-size: 6em;
+            letter-spacing: 12px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px rgba(0, 255, 255, 0.8);
+        }
+        .error-title {
+            font-family: 'Bebas Neue', cursive;
+            color: #00ffff;
+            font-size: 2em;
+            letter-spacing: 4px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+        }
+        .error-message {
+            color: #d7f8f8;
+            font-size: 1.1em;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .btn-home {
+            display: inline-block;
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #009999 0%, #006666 100%);
+            color: #d7f8f8;
+            border: 2px solid #00ffff;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Space Mono', monospace;
+            text-decoration: none;
+            transition: all 0.3s;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .btn-home:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="shark-logo">🦈</div>
+        <div class="error-code">502</div>
+        <div class="error-title">Bad Gateway</div>
+        <div class="error-message">
+            The gateway is blocked!<br>
+            Cannot reach the upstream server.
+        </div>
+        <a href="/" class="btn-home">Retry</a>
+    </div>
+</body>
+</html>'''
+        return web.Response(text=html, content_type='text/html', status=502)
+    
+    async def error_503(self, request: web.Request):
+        """Custom 503 Service Unavailable page"""
+        html = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🦈 503 - Service Unavailable</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Space Mono', monospace;
+            background: linear-gradient(180deg, #1a1a1a 0%, #333333 50%, #4d4d4d 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .error-container {
+            background: rgba(26, 26, 26, 0.85);
+            backdrop-filter: blur(20px);
+            border: 2px solid rgba(128, 128, 128, 0.5);
+            border-radius: 16px;
+            padding: 60px 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 0 60px rgba(128, 128, 128, 0.3);
+            text-align: center;
+        }
+        .shark-logo { 
+            font-size: 120px; 
+            margin-bottom: 20px;
+            opacity: 0.5;
+            animation: sleep 2s ease-in-out infinite;
+        }
+        @keyframes sleep {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.7; }
+        }
+        .error-code {
+            font-family: 'Bebas Neue', cursive;
+            color: #808080;
+            font-size: 6em;
+            letter-spacing: 12px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px rgba(128, 128, 128, 0.8);
+        }
+        .error-title {
+            font-family: 'Bebas Neue', cursive;
+            color: #a0a0a0;
+            font-size: 2em;
+            letter-spacing: 4px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+        }
+        .error-message {
+            color: #d0d0d0;
+            font-size: 1.1em;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .btn-home {
+            display: inline-block;
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #4d4d4d 0%, #333333 100%);
+            color: #d0d0d0;
+            border: 2px solid #808080;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Space Mono', monospace;
+            text-decoration: none;
+            transition: all 0.3s;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .btn-home:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(128, 128, 128, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="shark-logo">🦈</div>
+        <div class="error-code">503</div>
+        <div class="error-title">Service Unavailable</div>
+        <div class="error-message">
+            The shark is sleeping...<br>
+            Service temporarily unavailable. Please try again later.
+        </div>
+        <a href="/" class="btn-home">Check Back Later</a>
+    </div>
+</body>
+</html>'''
+        return web.Response(text=html, content_type='text/html', status=503)
 
     @aiohttp_jinja2.template('login.html')
     async def login_page(self, request: web.Request):
@@ -815,6 +1315,18 @@ class SharkCalendarApp:
             data = await request.json()
             tags = data.get('tags', [])
             platforms = data.get('platforms', [])
+            
+            # Get location
+            location = data.get('location', '')
+            
+            # Get notification options
+            notify_enabled = data.get('notify_enabled', False)
+            notify_days_before = data.get('notify_days_before', 0)
+            
+            # Get repeat options
+            repeat_enabled = data.get('repeat_enabled', False)
+            repeat_interval = data.get('repeat_interval', None)
+            
             event = await self.db.create_event(
                 title=data['title'],
                 description=data.get('description', ''),
@@ -822,7 +1334,12 @@ class SharkCalendarApp:
                 event_time=None,
                 tags=tags,
                 platforms=platforms,
-                username=username
+                username=username,
+                location=location,
+                notify_enabled=notify_enabled,
+                notify_days_before=notify_days_before,
+                repeat_enabled=repeat_enabled,
+                repeat_interval=repeat_interval
             )
             return web.json_response(event, status=201)
         except Exception as e:
@@ -1213,15 +1730,13 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
 }
 .cal-day { 
   min-height:90px; 
-  max-height:90px;
   background:rgba(0,26,51,0.6); border-radius:8px; 
   padding:8px 6px; position:relative; border:1px solid rgba(0,229,255,0.08);
   transition:all 0.2s; cursor:pointer;
-  overflow-y:auto;
-  overflow-x:hidden;
+  overflow:visible;
 }
 @media (max-width:600px){ 
-  .cal-day { min-height:70px; max-height:70px; padding:6px 4px; }
+  .cal-day { min-height:70px; max-height:70px; padding:6px 4px; overflow-y:auto; overflow-x:hidden; }
 }
 .cal-day:hover { 
   border-color:rgba(0,229,255,0.3); 
@@ -1666,6 +2181,10 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
         <textarea class="form-textarea" id="eventDescription" placeholder="Event details..."></textarea>
       </div>
       <div class="form-group">
+        <label class="form-label">Location</label>
+        <input type="text" class="form-input" id="eventLocation" placeholder="Enter location (optional)">
+      </div>
+      <div class="form-group">
         <label class="form-label">Date</label>
         <input type="date" class="form-input" id="eventDate" required>
       </div>
@@ -1687,6 +2206,47 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
           <div class="select-items" id="platformsItems"></div>
         </div>
       </div>
+      
+      <div class="form-group">
+        <label class="form-label">Notification</label>
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;">
+            <input type="radio" name="notifyOption" value="yes" id="notifyYes" style="cursor:pointer;">
+            <span>Yes</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;">
+            <input type="radio" name="notifyOption" value="no" id="notifyNo" checked style="cursor:pointer;">
+            <span>No</span>
+          </label>
+        </div>
+        <select class="form-input" id="notifyTime" style="display:none;">
+          <option value="0">On event day (8:00 AM)</option>
+          <option value="1">1 day before (8:00 PM)</option>
+          <option value="2">2 days before (8:00 PM)</option>
+          <option value="7">1 week before (8:00 PM)</option>
+        </select>
+      </div>
+      
+      <div class="form-group">
+        <label class="form-label">Repeat Event</label>
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;">
+            <input type="radio" name="repeatOption" value="yes" id="repeatYes" style="cursor:pointer;">
+            <span>Yes</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;">
+            <input type="radio" name="repeatOption" value="no" id="repeatNo" checked style="cursor:pointer;">
+            <span>No</span>
+          </label>
+        </div>
+        <select class="form-input" id="repeatInterval" style="display:none;">
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+          <option value="yearly">Yearly</option>
+        </select>
+      </div>
+      
       <div class="modal-actions">
         <button type="button" class="btn" onclick="closeEventModal()">Cancel</button>
         <button type="submit" class="btn">Create Event</button>
@@ -1708,6 +2268,11 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
     <div class="form-group">
       <label class="form-label">Description</label>
       <textarea class="form-textarea" id="editEventDescription" placeholder="Event description..."></textarea>
+    </div>
+    
+    <div class="form-group">
+      <label class="form-label">Location</label>
+      <input type="text" class="form-input" id="editEventLocation" placeholder="Enter location (optional)">
     </div>
     
     <div class="form-group">
@@ -1733,6 +2298,46 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
         </div>
         <div class="select-items" id="editPlatformsItems"></div>
       </div>
+    </div>
+    
+    <div class="form-group">
+      <label class="form-label">Notification</label>
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;">
+          <input type="radio" name="editNotifyOption" value="yes" id="editNotifyYes" style="cursor:pointer;">
+          <span>Yes</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;">
+          <input type="radio" name="editNotifyOption" value="no" id="editNotifyNo" checked style="cursor:pointer;">
+          <span>No</span>
+        </label>
+      </div>
+      <select class="form-input" id="editNotifyTime" style="display:none;">
+        <option value="0">On event day (8:00 AM)</option>
+        <option value="1">1 day before (8:00 PM)</option>
+        <option value="2">2 days before (8:00 PM)</option>
+        <option value="7">1 week before (8:00 PM)</option>
+      </select>
+    </div>
+    
+    <div class="form-group">
+      <label class="form-label">Repeat Event</label>
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;">
+          <input type="radio" name="editRepeatOption" value="yes" id="editRepeatYes" style="cursor:pointer;">
+          <span>Yes</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;">
+          <input type="radio" name="editRepeatOption" value="no" id="editRepeatNo" checked style="cursor:pointer;">
+          <span>No</span>
+        </label>
+      </div>
+      <select class="form-input" id="editRepeatInterval" style="display:none;">
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly</option>
+        <option value="monthly">Monthly</option>
+        <option value="yearly">Yearly</option>
+      </select>
     </div>
     
     <div class="modal-actions">
@@ -1838,38 +2443,40 @@ function scheduleNotifications() {
   }
   
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
   
   eventsData.forEach(event => {
-    const eventDate = new Date(event.event_date + 'T00:00:00');
-    const eventDateOnly = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
-    
-    // Check if event is today
-    if (eventDateOnly.getTime() === today.getTime()) {
-      const notifyTime = new Date(now);
-      notifyTime.setHours(8, 0, 0, 0); // 8 AM notification
-      
-      if (now < notifyTime) {
-        const timeUntil = notifyTime.getTime() - now.getTime();
-        setTimeout(() => {
-          showEventNotification(event, 'Today');
-        }, timeUntil);
-      }
+    // Skip if notifications not enabled for this event
+    if (!event.notify_enabled) {
+      return;
     }
     
-    // Check if event is tomorrow
-    if (eventDateOnly.getTime() === tomorrow.getTime()) {
-      const notifyTime = new Date(now);
-      notifyTime.setHours(20, 0, 0, 0); // 8 PM notification for tomorrow
+    const eventDate = new Date(event.event_date + 'T00:00:00');
+    const daysBefore = event.notify_days_before || 0;
+    
+    // Calculate notification date
+    const notifyDate = new Date(eventDate);
+    notifyDate.setDate(notifyDate.getDate() - daysBefore);
+    
+    // Set notification time based on days before
+    if (daysBefore === 0) {
+      notifyDate.setHours(8, 0, 0, 0); // 8 AM on event day
+    } else {
+      notifyDate.setHours(20, 0, 0, 0); // 8 PM on notification day
+    }
+    
+    // Only schedule if notification time is in the future
+    if (notifyDate > now) {
+      const timeUntil = notifyDate.getTime() - now.getTime();
       
-      if (now < notifyTime) {
-        const timeUntil = notifyTime.getTime() - now.getTime();
-        setTimeout(() => {
-          showEventNotification(event, 'Tomorrow');
-        }, timeUntil);
-      }
+      setTimeout(() => {
+        let timing = 'Today';
+        if (daysBefore === 1) timing = 'Tomorrow';
+        else if (daysBefore === 2) timing = 'In 2 Days';
+        else if (daysBefore === 7) timing = 'In 1 Week';
+        else if (daysBefore > 0) timing = `In ${daysBefore} Days`;
+        
+        showEventNotification(event, timing);
+      }, timeUntil);
     }
   });
 }
@@ -1917,7 +2524,43 @@ async function init() {
   await loadEvents();
   await requestNotificationPermission();
   scheduleNotifications();
+  
+  // Setup notification and repeat option handlers
+  setupEventOptionsHandlers();
+  
   console.log('=== INIT COMPLETED ===');
+}
+
+function setupEventOptionsHandlers() {
+  // Create modal handlers
+  document.getElementById('notifyYes').addEventListener('change', function() {
+    document.getElementById('notifyTime').style.display = this.checked ? 'block' : 'none';
+  });
+  document.getElementById('notifyNo').addEventListener('change', function() {
+    document.getElementById('notifyTime').style.display = 'none';
+  });
+  
+  document.getElementById('repeatYes').addEventListener('change', function() {
+    document.getElementById('repeatInterval').style.display = this.checked ? 'block' : 'none';
+  });
+  document.getElementById('repeatNo').addEventListener('change', function() {
+    document.getElementById('repeatInterval').style.display = 'none';
+  });
+  
+  // Edit modal handlers
+  document.getElementById('editNotifyYes').addEventListener('change', function() {
+    document.getElementById('editNotifyTime').style.display = this.checked ? 'block' : 'none';
+  });
+  document.getElementById('editNotifyNo').addEventListener('change', function() {
+    document.getElementById('editNotifyTime').style.display = 'none';
+  });
+  
+  document.getElementById('editRepeatYes').addEventListener('change', function() {
+    document.getElementById('editRepeatInterval').style.display = this.checked ? 'block' : 'none';
+  });
+  document.getElementById('editRepeatNo').addEventListener('change', function() {
+    document.getElementById('editRepeatInterval').style.display = 'none';
+  });
 }
 
 async function fetchEvents() {
@@ -2310,6 +2953,7 @@ function showEventDetails(ev) {
   document.getElementById('detailsEventTitle').innerText = ev.title;
   document.getElementById('editEventTitle').value = ev.title;
   document.getElementById('editEventDescription').value = ev.description || '';
+  document.getElementById('editEventLocation').value = ev.location || '';
   document.getElementById('editEventDate').value = ev.event_date;
   
   // Set up edit tags
@@ -2322,6 +2966,26 @@ function showEventDetails(ev) {
   updateDropdownDisplay('editPlatformsSelect', 'editPlatformsDisplay', selectedEditPlatforms);
   updateCheckboxes('editPlatformsItems', selectedEditPlatforms);
   
+  // Set up notification options
+  if (ev.notify_enabled) {
+    document.getElementById('editNotifyYes').checked = true;
+    document.getElementById('editNotifyTime').style.display = 'block';
+    document.getElementById('editNotifyTime').value = ev.notify_days_before || 0;
+  } else {
+    document.getElementById('editNotifyNo').checked = true;
+    document.getElementById('editNotifyTime').style.display = 'none';
+  }
+  
+  // Set up repeat options
+  if (ev.repeat_enabled) {
+    document.getElementById('editRepeatYes').checked = true;
+    document.getElementById('editRepeatInterval').style.display = 'block';
+    document.getElementById('editRepeatInterval').value = ev.repeat_interval || 'weekly';
+  } else {
+    document.getElementById('editRepeatNo').checked = true;
+    document.getElementById('editRepeatInterval').style.display = 'none';
+  }
+  
   document.getElementById('eventDetailsModal').classList.add('active');
 }
 
@@ -2333,12 +2997,20 @@ function closeEventDetailsModal() {
 async function saveEventChanges() {
   if (!currentEventDetails) return;
   
+  const notifyEnabled = document.getElementById('editNotifyYes').checked;
+  const repeatEnabled = document.getElementById('editRepeatYes').checked;
+  
   const updatedData = {
     title: document.getElementById('editEventTitle').value,
     description: document.getElementById('editEventDescription').value,
+    location: document.getElementById('editEventLocation').value,
     event_date: document.getElementById('editEventDate').value,
     tags: selectedEditTags,
-    platforms: selectedEditPlatforms
+    platforms: selectedEditPlatforms,
+    notify_enabled: notifyEnabled,
+    notify_days_before: notifyEnabled ? parseInt(document.getElementById('editNotifyTime').value) : 0,
+    repeat_enabled: repeatEnabled,
+    repeat_interval: repeatEnabled ? document.getElementById('editRepeatInterval').value : null
   };
   
   try {
@@ -2632,12 +3304,20 @@ document.getElementById('eventDetailsModal').addEventListener('click', (e) => {
 document.getElementById('eventForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   
+  const notifyEnabled = document.getElementById('notifyYes').checked;
+  const repeatEnabled = document.getElementById('repeatYes').checked;
+  
   const eventData = {
     title: document.getElementById('eventTitle').value,
     description: document.getElementById('eventDescription').value,
+    location: document.getElementById('eventLocation').value,
     event_date: document.getElementById('eventDate').value,
     tags: selectedTags,
-    platforms: selectedPlatforms
+    platforms: selectedPlatforms,
+    notify_enabled: notifyEnabled,
+    notify_days_before: notifyEnabled ? parseInt(document.getElementById('notifyTime').value) : 0,
+    repeat_enabled: repeatEnabled,
+    repeat_interval: repeatEnabled ? document.getElementById('repeatInterval').value : null
   };
   
   try {
