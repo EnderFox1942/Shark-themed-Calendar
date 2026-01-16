@@ -8,7 +8,7 @@ import os
 import json
 import hashlib
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Dict, List
 from aiohttp import web
 import aiohttp_jinja2
@@ -370,6 +370,11 @@ class SharkCalendarApp:
             env_vars.get('SUPABASE_POOLER_URL')
         )
         self.ip_blacklist = set(env_vars.get('IP_BLACKLIST', []))
+        
+        # Rate limiting and login attempt tracking
+        self.login_attempts = {}  # {ip: {'count': int, 'timestamp': datetime}}
+        self.rate_limit_cache = {}  # {ip: {'requests': int, 'reset_time': datetime}}
+        
         self.tags = [
             "Coding Project",
             "College Assignment",
@@ -432,6 +437,17 @@ class SharkCalendarApp:
         self.app.router.add_delete('/api/events/{id}', self.delete_event)
         self.app.router.add_post('/api/profile-picture', self.upload_profile_picture)
         self.app.router.add_get('/api/profile-picture', self.get_profile_picture)
+        
+        # Test routes for error pages
+        self.app.router.add_get('/test/400', self.test_400)
+        self.app.router.add_get('/test/401', self.test_401)
+        self.app.router.add_get('/test/403', self.test_403)
+        self.app.router.add_get('/test/404', self.test_404)
+        self.app.router.add_get('/test/429', self.test_429)
+        self.app.router.add_get('/test/500', self.test_500)
+        self.app.router.add_get('/test/502', self.test_502)
+        self.app.router.add_get('/test/503', self.test_503)
+        
         logger.info("✅ Routes configured")
     
     @web.middleware
@@ -447,6 +463,27 @@ class SharkCalendarApp:
         forwarded_for = request.headers.get('X-Forwarded-For')
         if forwarded_for:
             client_ip = forwarded_for.split(',')[0].strip()
+        
+        # Rate limiting: 100 requests per minute per IP
+        now = datetime.now()
+        if client_ip in self.rate_limit_cache:
+            cache = self.rate_limit_cache[client_ip]
+            if now < cache['reset_time']:
+                cache['requests'] += 1
+                if cache['requests'] > 100:
+                    logger.warning(f"⚠️  Rate limit exceeded for IP: {client_ip}")
+                    return await self.error_429(request)
+            else:
+                # Reset counter
+                self.rate_limit_cache[client_ip] = {
+                    'requests': 1,
+                    'reset_time': now + timedelta(minutes=1)
+                }
+        else:
+            self.rate_limit_cache[client_ip] = {
+                'requests': 1,
+                'reset_time': now + timedelta(minutes=1)
+            }
         
         # Log login page accesses only
         if request.path == '/login' or request.path.startswith('/login'):
@@ -468,6 +505,8 @@ class SharkCalendarApp:
                 return await self.error_403(request)
             elif ex.status == 404:
                 return await self.error_404(request)
+            elif ex.status == 429:
+                return await self.error_429(request)
             elif ex.status == 500:
                 return await self.error_500(request)
             elif ex.status == 502:
@@ -1251,6 +1290,104 @@ class SharkCalendarApp:
 </body>
 </html>'''
         return web.Response(text=html, content_type='text/html', status=503)
+    
+    async def error_429(self, request: web.Request):
+        """Custom 429 Too Many Requests page"""
+        html = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🦈 429 - Too Many Requests</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Space Mono', monospace;
+            background: linear-gradient(180deg, #330011 0%, #660022 50%, #990033 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .error-container {
+            background: rgba(51, 0, 17, 0.85);
+            backdrop-filter: blur(20px);
+            border: 2px solid rgba(255, 51, 102, 0.5);
+            border-radius: 16px;
+            padding: 60px 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 0 60px rgba(255, 51, 102, 0.3);
+            text-align: center;
+        }
+        .shark-logo { 
+            font-size: 120px; 
+            margin-bottom: 20px;
+            animation: swim 2s ease-in-out infinite;
+        }
+        @keyframes swim {
+            0%, 100% { transform: translateX(-20px); }
+            50% { transform: translateX(20px); }
+        }
+        .error-code {
+            font-family: 'Bebas Neue', cursive;
+            color: #ff3366;
+            font-size: 6em;
+            letter-spacing: 12px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px rgba(255, 51, 102, 0.8);
+        }
+        .error-title {
+            font-family: 'Bebas Neue', cursive;
+            color: #ff3366;
+            font-size: 2em;
+            letter-spacing: 4px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+        }
+        .error-message {
+            color: #f8d7e0;
+            font-size: 1.1em;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .btn-home {
+            display: inline-block;
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #990033 0%, #660022 100%);
+            color: #f8d7e0;
+            border: 2px solid #ff3366;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Space Mono', monospace;
+            text-decoration: none;
+            transition: all 0.3s;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+        .btn-home:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(255, 51, 102, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="shark-logo">🦈</div>
+        <div class="error-code">429</div>
+        <div class="error-title">Too Many Requests</div>
+        <div class="error-message">
+            Whoa there! The shark is overwhelmed!<br>
+            You're swimming too fast. Please slow down and try again in a minute.
+        </div>
+        <a href="/" class="btn-home">Take a Breath</a>
+    </div>
+</body>
+</html>'''
+        return web.Response(text=html, content_type='text/html', status=429)
 
     @aiohttp_jinja2.template('login.html')
     async def login_page(self, request: web.Request):
@@ -1260,10 +1397,37 @@ class SharkCalendarApp:
         return {'error': request.query.get('error', '')}
 
     async def do_login(self, request: web.Request):
+        # Get client IP
+        client_ip = request.remote
+        forwarded_for = request.headers.get('X-Forwarded-For')
+        if forwarded_for:
+            client_ip = forwarded_for.split(',')[0].strip()
+        
+        # Check login attempts
+        now = datetime.now()
+        if client_ip in self.login_attempts:
+            attempt_data = self.login_attempts[client_ip]
+            
+            # Reset if more than 15 minutes have passed
+            if now - attempt_data['timestamp'] > timedelta(minutes=15):
+                self.login_attempts[client_ip] = {'count': 0, 'timestamp': now}
+            elif attempt_data['count'] >= 3:
+                # Too many failed attempts
+                time_remaining = 15 - int((now - attempt_data['timestamp']).total_seconds() / 60)
+                logger.warning(f"🚫 Too many login attempts from IP: {client_ip}")
+                raise web.HTTPFound(f'/login?error=Too many failed attempts. Try again in {time_remaining} minutes.')
+        else:
+            self.login_attempts[client_ip] = {'count': 0, 'timestamp': now}
+        
         data = await request.post()
         username = data.get('username', '')
         password = data.get('password', '')
+        
         if username == self.user.username and self.user.verify_password(password):
+            # Successful login - reset attempts
+            if client_ip in self.login_attempts:
+                del self.login_attempts[client_ip]
+            
             session = await new_session(request)
             session['authenticated'] = True
             session['username'] = username
@@ -1272,7 +1436,17 @@ class SharkCalendarApp:
                 self.user.set_profile_picture(profile_pic)
             raise web.HTTPFound('/')
         else:
-            raise web.HTTPFound('/login?error=Invalid credentials')
+            # Failed login - increment attempts
+            self.login_attempts[client_ip]['count'] += 1
+            self.login_attempts[client_ip]['timestamp'] = now
+            attempts_left = 3 - self.login_attempts[client_ip]['count']
+            
+            if attempts_left > 0:
+                logger.warning(f"⚠️  Failed login attempt from IP: {client_ip} ({attempts_left} attempts remaining)")
+                raise web.HTTPFound(f'/login?error=Invalid credentials ({attempts_left} attempts remaining)')
+            else:
+                logger.warning(f"🚫 Account locked for IP: {client_ip} (15 minutes)")
+                raise web.HTTPFound('/login?error=Too many failed attempts. Account locked for 15 minutes.')
 
     async def logout(self, request: web.Request):
         session = await get_session(request)
@@ -1393,6 +1567,31 @@ class SharkCalendarApp:
             return web.json_response({'picture': picture})
         except Exception as e:
             return web.json_response({'error': str(e)}, status=400)
+    
+    # Test routes for error pages
+    async def test_400(self, request: web.Request):
+        return await self.error_400(request)
+    
+    async def test_401(self, request: web.Request):
+        return await self.error_401(request)
+    
+    async def test_403(self, request: web.Request):
+        return await self.error_403(request)
+    
+    async def test_404(self, request: web.Request):
+        return await self.error_404(request)
+    
+    async def test_429(self, request: web.Request):
+        return await self.error_429(request)
+    
+    async def test_500(self, request: web.Request):
+        return await self.error_500(request)
+    
+    async def test_502(self, request: web.Request):
+        return await self.error_502(request)
+    
+    async def test_503(self, request: web.Request):
+        return await self.error_503(request)
 
     def get_login_template(self) -> str:
         return '''<!DOCTYPE html>
@@ -2164,6 +2363,7 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
     <div class="quick-actions">
       <div class="quick-actions-title">Quick Actions</div>
       <button class="btn" style="width:100%;" onclick="openEventModal()">+ New Event</button>
+      <button class="btn" style="width:100%;margin-top:8px;" onclick="openImportModal()">📥 Import Events</button>
     </div>
   </div>
   
@@ -2394,6 +2594,45 @@ html,body { margin: 0; padding: 0; font-family:'Space Mono',monospace; color:var
   </div>
 </div>
 
+<!-- Import Events Modal -->
+<div class="modal" id="importModal">
+  <div class="modal-content">
+    <div class="modal-header">Import Events</div>
+    
+    <div class="form-group">
+      <label class="form-label">Import from ICS File</label>
+      <p style="font-size:11px;color:rgba(232,244,248,0.6);margin-bottom:8px;">
+        Upload .ics files from Discord, Google Calendar, Outlook, or other calendar apps
+      </p>
+      <input type="file" class="form-input" id="icsFileInput" accept=".ics,.ical" onchange="handleICSUpload(event)">
+    </div>
+    
+    <div style="margin:20px 0;text-align:center;color:rgba(232,244,248,0.5);font-size:12px;">
+      OR
+    </div>
+    
+    <div class="form-group">
+      <label class="form-label">Public Calendar URL</label>
+      <p style="font-size:11px;color:rgba(232,244,248,0.6);margin-bottom:8px;">
+        Paste a public iCal URL (one-time import)
+      </p>
+      <input type="text" class="form-input" id="googleCalUrl" placeholder="https://calendar.google.com/calendar/ical/...">
+      <button class="btn" style="margin-top:8px;width:100%;" onclick="importFromGoogleCalendar()">Import from URL</button>
+    </div>
+    
+    <div id="importProgress" style="display:none;margin-top:16px;padding:12px;background:rgba(0,229,255,0.1);border-radius:6px;border:1px solid rgba(0,229,255,0.3);">
+      <div style="color:var(--neon);font-size:12px;margin-bottom:8px;" id="importStatus">Processing...</div>
+      <div style="height:4px;background:rgba(0,229,255,0.2);border-radius:2px;overflow:hidden;">
+        <div id="importProgressBar" style="height:100%;background:var(--neon);width:0%;transition:width 0.3s;"></div>
+      </div>
+    </div>
+    
+    <div class="modal-actions">
+      <button type="button" class="btn" onclick="closeImportModal()">Close</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // Platform logo URLs
 const platformLogos = {
@@ -2422,6 +2661,10 @@ let selectedEditTags = [];
 let selectedEditPlatforms = [];
 let currentEventDetails = null;
 
+// Track sent notifications to prevent spam
+let sentNotifications = new Set();
+let scheduledTimeouts = new Map();
+
 // Image cropping variables
 let cropImage = null;
 let cropCanvas = null;
@@ -2435,6 +2678,186 @@ let isCropping = false;
 // Mobile detection
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 900;
 console.log('Device detected:', isMobile ? 'Mobile' : 'Desktop');
+
+// ICS Import Functions
+function openImportModal() {
+  document.getElementById('importModal').classList.add('active');
+}
+
+function closeImportModal() {
+  document.getElementById('importModal').classList.remove('active');
+  document.getElementById('icsFileInput').value = '';
+  document.getElementById('googleCalUrl').value = '';
+  document.getElementById('importProgress').style.display = 'none';
+}
+
+async function handleICSUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    const icsContent = e.target.result;
+    await parseAndImportICS(icsContent);
+  };
+  reader.readAsText(file);
+}
+
+async function importFromGoogleCalendar() {
+  const url = document.getElementById('googleCalUrl').value.trim();
+  if (!url) {
+    alert('Please enter a Google Calendar URL');
+    return;
+  }
+  
+  showImportProgress('Fetching calendar...', 10);
+  
+  try {
+    // Use a CORS proxy to fetch the calendar
+    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+    const response = await fetch(proxyUrl);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch calendar. Make sure the calendar is public.');
+    }
+    
+    const icsContent = await response.text();
+    await parseAndImportICS(icsContent);
+  } catch (e) {
+    console.error('Error importing from Google Calendar:', e);
+    alert('Error importing calendar: ' + e.message + '\n\nMake sure your calendar is public and the URL is correct.');
+    hideImportProgress();
+  }
+}
+
+function showImportProgress(status, percent) {
+  document.getElementById('importProgress').style.display = 'block';
+  document.getElementById('importStatus').innerText = status;
+  document.getElementById('importProgressBar').style.width = percent + '%';
+}
+
+function hideImportProgress() {
+  setTimeout(() => {
+    document.getElementById('importProgress').style.display = 'none';
+  }, 2000);
+}
+
+async function parseAndImportICS(icsContent) {
+  showImportProgress('Parsing events...', 30);
+  
+  try {
+    const events = parseICS(icsContent);
+    
+    if (events.length === 0) {
+      alert('No events found in the file');
+      hideImportProgress();
+      return;
+    }
+    
+    showImportProgress(`Importing ${events.length} events...`, 50);
+    
+    let imported = 0;
+    let failed = 0;
+    
+    for (let i = 0; i < events.length; i++) {
+      const event = events[i];
+      const progress = 50 + ((i / events.length) * 50);
+      showImportProgress(`Importing ${i + 1}/${events.length}...`, progress);
+      
+      try {
+        const eventData = {
+          title: event.title,
+          description: event.description || '',
+          location: event.location || '',
+          event_date: event.date,
+          tags: [],
+          platforms: [],
+          notify_enabled: false,
+          notify_days_before: 0,
+          repeat_enabled: false,
+          repeat_interval: null
+        };
+        
+        const response = await fetch('/api/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(eventData)
+        });
+        
+        if (response.ok) {
+          imported++;
+        } else {
+          failed++;
+        }
+      } catch (e) {
+        console.error('Error importing event:', e);
+        failed++;
+      }
+    }
+    
+    showImportProgress(`Complete! Imported ${imported} events`, 100);
+    
+    await loadEvents();
+    
+    setTimeout(() => {
+      closeImportModal();
+      alert(`Import complete!\n\nImported: ${imported} events\nFailed: ${failed} events`);
+    }, 1500);
+    
+  } catch (e) {
+    console.error('Error parsing ICS:', e);
+    alert('Error parsing calendar file: ' + e.message);
+    hideImportProgress();
+  }
+}
+
+function parseICS(icsContent) {
+  const events = [];
+  const lines = icsContent.split(/\r?\n/);
+  
+  let inEvent = false;
+  let currentEvent = {};
+  
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].trim();
+    
+    // Handle line continuations (lines starting with space/tab)
+    while (i + 1 < lines.length && (lines[i + 1].startsWith(' ') || lines[i + 1].startsWith('\t'))) {
+      i++;
+      line += lines[i].trim();
+    }
+    
+    if (line === 'BEGIN:VEVENT') {
+      inEvent = true;
+      currentEvent = {};
+    } else if (line === 'END:VEVENT') {
+      if (currentEvent.title && currentEvent.date) {
+        events.push(currentEvent);
+      }
+      inEvent = false;
+    } else if (inEvent) {
+      // Parse event properties
+      if (line.startsWith('SUMMARY:')) {
+        currentEvent.title = line.substring(8).trim();
+      } else if (line.startsWith('DESCRIPTION:')) {
+        currentEvent.description = line.substring(12).trim().replace(/\\n/g, '\n');
+      } else if (line.startsWith('LOCATION:')) {
+        currentEvent.location = line.substring(9).trim();
+      } else if (line.startsWith('DTSTART')) {
+        const dateMatch = line.match(/[:;](\d{8})/);
+        if (dateMatch) {
+          const dateStr = dateMatch[1];
+          const year = dateStr.substring(0, 4);
+          const month = dateStr.substring(4, 6);
+          const day = dateStr.substring(6, 8);
+          currentEvent.date = `${year}-${month}-${day}`;
+        }
+      }
+    }
+  }
+  
+  return events;
+}
 
 // Notification System
 async function requestNotificationPermission() {
@@ -2466,11 +2889,20 @@ function scheduleNotifications() {
     return;
   }
   
+  // Clear all existing scheduled timeouts
+  scheduledTimeouts.forEach(timeout => clearTimeout(timeout));
+  scheduledTimeouts.clear();
+  
   const now = new Date();
   
   eventsData.forEach(event => {
     // Skip if notifications not enabled for this event
     if (!event.notify_enabled) {
+      return;
+    }
+    
+    // Skip repeat occurrences - only notify for original events
+    if (event.is_repeat_occurrence) {
       return;
     }
     
@@ -2488,36 +2920,85 @@ function scheduleNotifications() {
       notifyDate.setHours(20, 0, 0, 0); // 8 PM on notification day
     }
     
+    // Create unique notification key
+    const notifyKey = `${event.id}_${notifyDate.getTime()}`;
+    
+    // Skip if already sent
+    if (sentNotifications.has(notifyKey)) {
+      console.log(`Notification already sent for ${event.title} on ${notifyDate}`);
+      return;
+    }
+    
     // Only schedule if notification time is in the future
     if (notifyDate > now) {
       const timeUntil = notifyDate.getTime() - now.getTime();
       
-      setTimeout(() => {
+      // Don't schedule if more than 24 hours away (will reschedule on next load)
+      if (timeUntil > 24 * 60 * 60 * 1000) {
+        return;
+      }
+      
+      console.log(`Scheduling notification for ${event.title} in ${Math.round(timeUntil / 1000 / 60)} minutes`);
+      
+      const timeoutId = setTimeout(() => {
         let timing = 'Today';
         if (daysBefore === 1) timing = 'Tomorrow';
         else if (daysBefore === 2) timing = 'In 2 Days';
         else if (daysBefore === 7) timing = 'In 1 Week';
         else if (daysBefore > 0) timing = `In ${daysBefore} Days`;
         
-        showEventNotification(event, timing);
+        showEventNotification(event, timing, notifyKey);
       }, timeUntil);
+      
+      scheduledTimeouts.set(notifyKey, timeoutId);
+    } else if (notifyDate.toDateString() === now.toDateString() && now.getHours() >= notifyDate.getHours()) {
+      // If notification time was earlier today and we haven't sent it, send now
+      if (!sentNotifications.has(notifyKey)) {
+        let timing = 'Today';
+        if (daysBefore === 1) timing = 'Tomorrow';
+        else if (daysBefore === 2) timing = 'In 2 Days';
+        else if (daysBefore === 7) timing = 'In 1 Week';
+        else if (daysBefore > 0) timing = `In ${daysBefore} Days`;
+        
+        console.log(`Sending missed notification for ${event.title}`);
+        showEventNotification(event, timing, notifyKey);
+      }
     }
   });
+  
+  console.log(`Scheduled ${scheduledTimeouts.size} notifications`);
 }
 
-function showEventNotification(event, timing) {
+function showEventNotification(event, timing, notifyKey) {
   if (Notification.permission !== 'granted') return;
+  
+  // Mark as sent to prevent duplicates
+  sentNotifications.add(notifyKey);
+  
+  // Store in localStorage to persist across page reloads
+  try {
+    const sent = JSON.parse(localStorage.getItem('sentNotifications') || '[]');
+    sent.push(notifyKey);
+    // Keep only last 1000 notifications
+    if (sent.length > 1000) sent.shift();
+    localStorage.setItem('sentNotifications', JSON.stringify(sent));
+  } catch (e) {
+    console.error('Error saving notification state:', e);
+  }
   
   let body = `${timing}: ${event.title}`;
   if (event.description) {
     body += `\n${event.description}`;
+  }
+  if (event.location) {
+    body += `\n📍 ${event.location}`;
   }
   
   const notification = new Notification(`🦈 ${timing}'s Event`, {
     body: body,
     icon: '/favicon.ico',
     badge: '/favicon.ico',
-    tag: `event-${event.id}`,
+    tag: notifyKey,
     requireInteraction: false
   });
   
@@ -2546,6 +3027,16 @@ async function init() {
   
   initDropdowns();
   await loadEvents();
+  
+  // Load previously sent notifications from localStorage
+  try {
+    const sent = JSON.parse(localStorage.getItem('sentNotifications') || '[]');
+    sentNotifications = new Set(sent);
+    console.log(`Loaded ${sentNotifications.size} previously sent notifications`);
+  } catch (e) {
+    console.error('Error loading notification state:', e);
+  }
+  
   await requestNotificationPermission();
   scheduleNotifications();
   
@@ -3749,6 +4240,12 @@ async function uploadProfilePic() {
 document.getElementById('profilePicModal').addEventListener('click', (e) => {
   if (e.target.id === 'profilePicModal') {
     closeProfilePicModal();
+  }
+});
+
+document.getElementById('importModal').addEventListener('click', (e) => {
+  if (e.target.id === 'importModal') {
+    closeImportModal();
   }
 });
 
